@@ -1,0 +1,623 @@
+email content
+______________
+
+  
+
+__________________________
+
+
+
+
+// Add rooms logic  to the specified floor
+hotel.floors[floorIndex].rooms.push(...rooms);
+
+// Adjust room prices based on floor number
+const floorNumber = parseInt(floor_Number);
+const priceIncreasePercentage = getPercentageIncrease(floorNumber);
+if (priceIncreasePercentage > 0) {
+    for (const room of hotel.floors[floorIndex].rooms) {
+        room.price *= (1 + priceIncreasePercentage / 100);
+    }
+}
+
+// Update the hotel document with the modified floors
+await hotel.save();
+
+return res.status(200).json({
+    success: true,
+    message: 'Rooms added successfully to floor ' + floor_Number
+});
+
+// Function to calculate percentage increase based on floor number
+function getPercentageIncrease(floorNumber) {
+    if (floorNumber >= 4 && floorNumber < 6) {
+        return 10;
+    } else if (floorNumber >= 6 && floorNumber < 9) {
+        return 20;
+    } else if (floorNumber >= 9 && floorNumber < 13) {
+        return 30;
+    } else if (floorNumber >= 13 && floorNumber <= 15) {
+        return 35;
+    } else if (floorNumber > 15) {
+        return 40;
+    } else {
+        return 0; // No increase for floors below 4
+    }
+}
+
+
+*************************************
+
+
+Search Hotel
+_____________  
+
+
+   const search_Hotel = async (req, res) => {
+            try {
+                const { city, checkIn, checkOut, number_of_Rooms } = req.body;
+                const today = new Date();
+                today.setHours(0, 0, 0, 0); // Resetting hours, minutes, seconds, and milliseconds
+                
+                // Check for required fields
+                const requiredFields = ['city', 'checkIn', 'checkOut', 'number_of_Rooms'];
+                for (const field of requiredFields) {
+                    if (!req.body[field]) {
+                        return res.status(400).json({
+                            success: false,
+                            message: `Missing ${field.replace('_', ' ')} field`
+                        });
+                    }
+                }
+                
+                // Convert checkIn and checkOut dates into Date objects
+                const checkInDate = new Date(checkIn);
+                const checkOutDate = new Date(checkOut);
+                
+                // Check for valid check-in date
+                if (checkInDate < today) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `You can't select a previous date for check-in`
+                    });
+                }
+        
+                // Check if check-out date is after check-in date
+                if (checkOutDate <= checkInDate) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Check-out date must be after check-in date`
+                    });
+                }
+        
+                // Get hotels based on city
+                const hotels = await HotelModel.find({ city });
+        
+                // Loop through each hotel to calculate availability
+                for (let hotel of hotels) {
+                    let totalRooms = 0;
+                    let availableRoomTypeCounts = {};
+                    let bookedRoomTypeCounts = {};
+
+                    const bookedRooms = await bookedRoomModel.find({
+                        Hotel_Id: hotel.Hotel_Id,
+                        checkIn: { $lte: new Date(checkOutDate.getTime() + 24 * 60 * 60 * 1000) },
+                        checkOut: { $gte: checkInDate }
+                    });
+                      
+                    // Calculate total number of rooms in the hotel
+                    hotel.floors.forEach(floor => {
+                        totalRooms += floor.rooms.length;
+                    });
+                    
+                    // Loop through each available room to count room types
+            for (let floor of hotel.floors) {
+                for (let room of floor.rooms) {
+                    const roomType = room.type;
+                    if (!availableRoomTypeCounts[roomType]) {
+                        availableRoomTypeCounts[roomType] = 0;
+                    }
+                    availableRoomTypeCounts[roomType]++;
+                }
+            }        
+        
+        // Count the total number of booked rooms and their types
+for (const booking of bookedRooms) {
+    for (const bookedRoom of booking.bookedRoom) {
+        for (const room of bookedRoom.rooms) {                
+            const roomType = room.roomType;               
+
+            if (roomType !== undefined && roomType !== null) {
+                // Check if roomType is defined before using it
+                if (!bookedRoomTypeCounts[roomType]) {
+                    bookedRoomTypeCounts[roomType] = 0;
+                }
+                bookedRoomTypeCounts[roomType]++;
+            }
+        }
+    }
+}
+
+// Check availableRoomTypeCounts to ensure all room types are accounted for in bookedRoomTypeCounts
+for (const roomType in availableRoomTypeCounts) {
+    if (!bookedRoomTypeCounts.hasOwnProperty(roomType)) {
+        // If room type is missing, add it with a count of 0
+        bookedRoomTypeCounts[roomType] = 0;
+    }
+}
+
+        
+            hotel.totalRooms = totalRooms;
+            hotel.availableRooms = totalRooms - bookedRooms.length; // Assuming each booking reserves one room
+            hotel.bookedRoomsCount = bookedRooms.length;
+            hotel.enoughRoomsAvailable = hotel.availableRooms >= number_of_Rooms;
+            hotel.availableRoomTypeCounts = availableRoomTypeCounts;
+            hotel.bookedRoomTypeCounts = bookedRoomTypeCounts;
+
+            // Remove unnecessary fields
+            delete hotel.__v;
+            delete hotel.createdAt;
+            delete hotel.updatedAt;
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Search result",
+            hotels: hotels.map(hotel => ({
+                _id: hotel._id,
+                Hotel_Id: hotel.Hotel_Id,
+                Hotel_name: hotel.Hotel_name,
+                address: hotel.address,
+                city: hotel.city,
+                manager_id: hotel.manager_id,
+                HotelImages: hotel.HotelImages,
+                hotelType: hotel.hotelType,
+                facilities: hotel.facilities,
+                aboutHotel: hotel.aboutHotel,
+                totalRooms: hotel.totalRooms,
+                bookedRoomsCount: hotel.bookedRoomsCount,
+                availableRooms: hotel.availableRooms,
+                enoughRoomsAvailable: hotel.enoughRoomsAvailable,
+                availableRoomTypeCounts: Object.keys(hotel.availableRoomTypeCounts).reduce((acc, key) => {
+                    acc[key] = hotel.availableRoomTypeCounts[key] - (hotel.bookedRoomTypeCounts[key] || 0);
+                    return acc;
+                }, {}),
+                bookedRoomTypeCounts: hotel.bookedRoomTypeCounts
+            }))
+        });
+               
+            } catch (error) {
+                console.error(error);
+                res.status(500).json({
+                    success: false,
+                    message: "Server error"
+                });
+            }
+        };
+
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++__________________++++++++++++++++++++++++++++++++++++++++++++++
+  
+BN
+const bookHotel = async (req, res) => {
+        try {
+            const hotelId = req.params.hotelId;
+            const { checkIn, checkOut, roomType, customerId } = req.body;
+            let guests = req.body.guests;
+    
+            // Check for required fields
+            const requiredFields = ['checkIn', 'checkOut', 'roomType', 'customerId', 'guests'];
+    
+            for (const field of requiredFields) {
+                if (!req.body[field]) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Missing ${field.replace('_', ' ')} field`
+                    });
+                }
+            }
+    
+            // Convert check-in and check-out dates into Date objects
+            const checkInDate = new Date(checkIn);
+            const checkOutDate = new Date(checkOut);
+    
+            // Check if check-in and check-out dates are valid
+            const today = new Date();
+            today.setDate(today.getDate() - 1);
+    
+            if (checkInDate < today || checkOutDate < today || checkOutDate < checkInDate) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Invalid check-in or check-out dates`
+                });
+            }
+    
+            // Check for Hotel
+            const hotel = await HotelModel.findOne({ Hotel_Id: hotelId });
+            if (!hotel) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Hotel not found'
+                });
+            }
+    
+            const Hotel_name = hotel.Hotel_name;
+    
+            // Find booked rooms for the specified check-in date
+            const bookedRooms = await bookedRoomModel.find({
+                Hotel_Id: hotelId,
+                checkIn: checkInDate
+            });
+            
+            // If rooms are booked on the specified check-in date, exclude them
+            let excludedRooms = [];
+            if (bookedRooms.length > 0) {
+                bookedRooms.forEach(room => {
+                    if (room.bookedRoom && room.bookedRoom.rooms) {
+                        excludedRooms = excludedRooms.concat(room.bookedRoom.rooms.map(room => room.roomNumber));
+                    }
+                });
+            }
+            // Find available rooms with matching roomType and not booked for the specified check-in date
+            const availableRooms = await HotelModel.find({
+                Hotel_Id: hotelId,
+                'floors.rooms.type': roomType,
+                'floors.rooms.roomNumber': { $nin: excludedRooms }
+            });
+    
+            // If suitable rooms are not available, suggest the customer to book rooms with another roomType
+            if (availableRooms.length === 0) {
+                // Find other available room types for the specified check-in date
+                const availableRoomTypes = await HotelModel.distinct('floors.rooms.type', {
+                    Hotel_Id: hotelId,
+                    'floors.rooms.type': { $ne: roomType }
+                });
+    
+                return res.status(400).json({
+                    success: false,
+                    message: `Rooms with ${roomType} are not available for the specified check-in date. Available room types: ${availableRoomTypes.join(', ')}.`
+                });
+            }
+    
+            // Proceed with booking the hotel rooms
+            const bookedRoom = [];
+    
+            let remainingGuests = guests.length;
+    
+            for (const hotel of availableRooms) {
+                const floor = hotel.floors.find(floor => floor.rooms.some(room => room.type === roomType));
+                if (!floor) continue; // If the required room type is not available on any floor, skip this hotel
+    
+                const room = floor.rooms.find(room => room.type === roomType);
+                const guestsToAssign = Math.min(remainingGuests, room.capacity);
+    
+                // Update room availability
+                room.capacity -= guestsToAssign;
+    
+                // Assign guests to the room
+                const guestObjects = guests.slice(0, guestsToAssign);
+                guests = guests.slice(guestsToAssign);
+                // Generate booking_Id
+                const randomNumber = generateRandomNumber(6);
+                const booking_Id = `BKID${randomNumber}`;
+                bookedRoom.push({
+                    Hotel_Id: hotelId,
+                    Hotel_name: Hotel_name,
+                    Booking_Id: booking_Id,
+                    customerId: customerId,
+                    status: "confirmed",
+                    checkIn: checkInDate,
+                    checkOut: checkOutDate,
+                    bookedRoom: [{
+                        floorNumber: floor.floor_Number,
+                        rooms: [{
+                            roomNumber: room.room_number,
+                            available: room.capacity === 0,
+                            price: room.price,
+                            roomType: room.type
+                        }]
+                    }],
+                    guests: guestObjects
+                });
+    
+                remainingGuests -= guestsToAssign;
+                if (remainingGuests <= 0) break;
+            }
+    
+            // Save booking details in bookedRoomModel
+            await bookedRoomModel.insertMany(bookedRoom);
+    
+            // Return success response
+            return res.status(200).json({
+                success: true,
+                message: "Hotel Booked successfully",
+    
+            });
+    
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({
+                success: false,
+                message: "server error",
+                error_message: error.message
+            });
+        }
+    };
+    
+    
+    // Function to generate a random number
+    function generateRandomNumber(length) {
+        let result = '';
+        const characters = '0123456789';
+        const charactersLength = characters.length;
+    
+        for (let i = 0; i < length; i++) {
+            result += characters.charAt(Math.floor(Math.random() * charactersLength));
+        }
+    
+        return result;
+    }
+    
+
+
+----------------------------------------------------------------------------------------------------------------
+
+
+const updateRoom = async (req, res) => {
+    try {
+        const { Hotel_Id, room_number } = req.params;
+        const { description, price } = req.body;
+
+        // Check for Hotel_Id
+        if (!Hotel_Id) {
+            return res.status(400).json({
+                success: false,
+                message: 'Hotel_Id required'
+            });
+        }
+
+        // Check for room_number
+        if (!room_number) {
+            return res.status(400).json({
+                success: false,
+                message: 'room_number required'
+            });
+        }
+
+        // Check for description or price
+        if (!description && !price) {
+            return res.status(400).json({
+                success: false,
+                message: 'At least one of description or price required'
+            });
+        }
+
+        // Check for Hotel
+        let hotel = await HotelModel.findOne({ Hotel_Id });
+        if (!hotel) {
+            return res.status(400).json({
+                success: false,
+                message: 'Hotel not found'
+            });
+        }
+
+        // Find the room based on room_number
+        let foundRoom = null;
+        let foundFloor = null;
+        for (const floor of hotel.floors) {
+            const roomIndex = floor.rooms.findIndex(room => room.room_number === room_number);
+            if (roomIndex !== -1) {
+                foundRoom = hotel.floors[floorIndex].rooms[roomIndex];
+                foundFloor = floor;
+                break;
+            }
+        }
+
+        // If room doesn't exist, return error
+        if (!foundRoom) {
+            return res.status(400).json({
+                success: false,
+                message: `Room ${room_number} not found in hotel ${Hotel_Id}`
+            });
+        }
+
+        // Update description and price if provided
+        if (description) {
+            foundRoom.description = description;
+        }
+
+        if (price) {
+            foundRoom.price = price;
+        }
+
+        // Update the hotel document with the modified room details
+        await hotel.save();
+
+        return res.status(200).json({
+            success: true,
+            message: `Description and/or price updated for room ${room_number} in hotel ${Hotel_Id}`,
+            updatedRoom: foundRoom
+        });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: 'Server error',
+            error_message: error.message
+        });
+    }
+};
+
+
+
+__________________________________________________________________
+
+room to metro --> 20 (auto)
+nzm to mtj ----> 170 ( railway tickit)
+frooty -------> 40 rs
+1 cigret  -----> 10 
+mtj to govardhana ----> 100 ( texi)
+room ---------> 100
+puja samagri(dudh, prasad , phool) ---> 40 
+chai + biscuit -----> 35 
+govardhana to barsana -----> 100 ( auto)
+barsana to vrindvana ---> 140 (auto)
+vrindavana to bihari ji temple ---> 40
+shoes stand ---> 10 rs
+samsosa + lassi ----> 80 rs
+vrindava to mtj -----> 100 rs
+mtj to nzm ----> 165 rs
+metro to room ----> 20 rs
+water bottle ---> 7 * 20 = 140 rs 
+
+
+____________________________________________________________________________
+
+                                            /* Bookings Exports */
+    // Api to export Bookings
+            const export_Bookings = async (req, res) => {
+                try {
+                // Fetch all booking data from the booking Database
+                const bookings = await bookedRoomModel.find({});
+            
+                // Create Excel workbook and worksheet
+                const workbook = new ExcelJs.Workbook();
+                const worksheet = workbook.addWorksheet("Bookings");
+            
+                // Define the Excel Header
+                worksheet.columns = [
+                    {
+                    header: "Hotel_Id",
+                    key: "Hotel_Id",
+                    },
+                    
+                    {
+                    header: "Booking Id",
+                    key: "Booking_Id",
+                    },
+                    {
+                    header: "Customer ID",
+                    key: "customerId",
+                    },
+                    {
+                        header : "room Type",
+                        key : "roomType"
+                    },
+                    {
+                    header: "CheckIn Date",
+                    key: "checkIn",
+                    },
+                    {
+                    header: "CheckOut Date",
+                    key: "checkOut",
+                    },
+                    
+                    {
+                    header: "Status",
+                    key: "status",
+                    },
+
+                    {
+                    header: "Payment Status",
+                    key: "paymentStatus",
+                    },
+                    {
+                    header: "Total Fare",
+                    key: "room_fare",
+                    },
+                ];
+            
+                // Add Booking data to the worksheet
+                bookings.forEach((booking) => {
+                    worksheet.addRow({
+					Hotel_Id : booking.Hotel_Id,
+                    Booking_Id: booking.Booking_Id,
+                    customerId: booking.customerId,
+                    roomType: booking.roomType,
+                    checkIn: booking.checkIn,
+					checkOut : booking.checkOut,
+                    status: booking.status,
+                    paymentStatus: booking.paymentStatus,					
+                    room_fare: booking.room_fare,
+                    });
+                });
+            
+                // Set response headers for downloading the Excel file
+                res.setHeader(
+                    "Content-Type",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                );
+            
+                res.setHeader("Content-Disposition", "attachment; filename=bookings.xlsx");
+            
+                // Generate and send the Excel File as a response
+                await workbook.xlsx.write(res);
+            
+                // End the response
+                res.end();
+                } catch (error) {
+                console.error(error);
+                res.status(500).json({ success : false ,
+                                       message : "server error",
+                                        error_message : error.message			
+										});
+                }
+            };
+
+
+
+------------------------------------------------------
+
+
+Constantine
+Barika
+Aïn Beïda
+Bou Saada
+Aflou
+Algiers [El Djazaïr]
+Djelfa
+Bordj Bou Arreridj
+Aïn Oussera
+ChlefBéchar
+El Eulma
+Béjaïa
+Blida
+Biskra
+Annaba
+Tizi Ouzou 
+Tlemcen
+Oran
+Jijel
+Maghnia
+El Oued
+Messaad
+Laghouat
+Khenchela
+Skikda
+Setif
+Batna
+Tebessa
+Tiaret
+Relizane
+Médéa
+Mostaganem
+Guelma
+Sidi Bel Abbès
+Ouargla
+Souk Ahras 
+Saïda
+M'Sila
+Mascara
+Boumerdes
+Bir El Djir
+Ghardaia
+Sig
+Sidi Aissa
+Béni Saf
+Ksar Boukhari
+Meftah
+Chabet el Ameur
+Tizi Ghenif
+Beni Amrane
+
+
