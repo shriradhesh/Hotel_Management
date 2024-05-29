@@ -1,7 +1,237 @@
+  
+
 email content
 ______________
 
-  
+  const bookHotel = async (req, res) => {
+    try {
+        const hotelId = req.params.hotelId;
+        const { checkIn, checkOut, roomType, customerId, number_of_Rooms, promoCode } = req.body;
+        let guests = req.body.guests;
+
+        // Check for required fields
+        const requiredFields = ['checkIn', 'checkOut', 'roomType', 'customerId', 'number_of_Rooms', 'guests'];
+
+        for (const field of requiredFields) {
+            if (!req.body[field]) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Missing ${field.replace('_', ' ')} field`
+                });
+            }
+        }
+
+        // Convert check-in and check-out dates into Date objects
+        const checkInDate = new Date(checkIn);
+        const checkOutDate = new Date(checkOut);
+
+        // Check if check-in and check-out dates are valid
+        const today = new Date();
+        today.setDate(today.getDate() - 1);
+
+        if (checkInDate < today || checkOutDate < today || checkOutDate < checkInDate) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid check-in or check-out dates`
+            });
+        }
+
+        // Calculate number of days
+        const oneDay = 24 * 60 * 60 * 1000;
+        const checkInTime = 12 * 60 * 60 * 1000;
+        const checkOutTime = 10 * 60 * 60 * 1000;
+        const daysCount = Math.round((checkOutDate.getTime() + checkOutTime - checkInDate.getTime() - checkInTime) / oneDay) || 1;
+
+        // Check for Hotel
+        const hotel = await HotelModel.findOne({ Hotel_Id: hotelId });
+        if (!hotel) {
+            return res.status(400).json({
+                success: false,
+                message: 'Hotel not found'
+            });
+        }
+
+        const manager_id = hotel.manager_id;
+        // Access room price based on roomType
+        let room_fare;
+        for (const floor of hotel.floors) {
+            for (const room of floor.rooms) {
+                if (room.type === roomType) {
+                    const baseroom_fare = room.price;
+                    room_fare = baseroom_fare * daysCount;
+                    break;
+                }
+            }
+            if (room_fare) break;
+        }
+
+        // Check for hotel manager
+        const hotel_manager = await userModel.findOne({ manager_id });
+        if (!hotel_manager) {
+            return res.status(400).json({
+                success: false,
+                message: 'Hotel manager does not exist'
+            });
+        }
+
+        // Access Hotel manager email
+        const hotelManager_Email = hotel_manager.email;
+
+        // Check for customer
+        const customer = await customerModel.findById(customerId);
+        if (!customer) {
+            return res.status(400).json({
+                success: false,
+                message: 'Customer does not exist'
+            });
+        }
+        const customerName = customer.customerName;
+        const customer_email = customer.email;
+
+        // Determine room capacity based on room type
+        let roomCapacity;
+        for (const floor of hotel.floors) {
+            for (const room of floor.rooms) {
+                if (room.type === roomType && room.capacity) {
+                    roomCapacity = room.capacity;
+                    break;
+                }
+            }
+            if (roomCapacity) break;
+        }
+
+        if (!roomCapacity) {
+            switch (roomType) {
+                case 'standard':
+                    roomCapacity = 4;
+                    break;
+                case 'deluxe':
+                    roomCapacity = 2;
+                    break;
+                default:
+                    roomCapacity = 1; // Default capacity
+                    break;
+            }
+        }
+
+        const maxChildrenAge = 5;
+        let childrenCount = 0;
+        let regularGuestsCount = 0;
+
+        guests.forEach(guest => {
+            if (guest.age < maxChildrenAge) {
+                childrenCount++;
+            } else {
+                regularGuestsCount++;
+            }
+        });
+
+        if (childrenCount > 2) {
+            return res.status(400).json({
+                success: false,
+                message: `Only two children under the age of ${maxChildrenAge} are allowed in a ${roomType} room.`
+            });
+        }
+
+        const totalGuests = regularGuestsCount;
+
+        if (totalGuests > roomCapacity * number_of_Rooms) {
+            return res.status(400).json({
+                success: false,
+                message: `Guests limit exceeded. Maximum allowed guests for ${number_of_Rooms} ${roomType} room(s) is ${roomCapacity * number_of_Rooms}.`
+            });
+        }
+
+        // Promo code validation
+        const applyPromoCode = (room_fare, promoCode, checkInDate) => {
+            const promoCodes = {
+                'HOTEL20': { discount: 20, dates: ['2024-02-12', '2024-02-13', '2024-02-14', '2024-02-15'] },
+                'HOTEL25': { discount: 25, dates: ['2024-12-24', '2024-12-25'] } // Example dates for Christmas
+            };
+
+            if (promoCodes[promoCode]) {
+                const { discount, dates } = promoCodes[promoCode];
+                const checkInStr = checkInDate.toISOString().split('T')[0];
+                if (dates.includes(checkInStr)) {
+                    return room_fare * (1 - discount / 100);
+                }
+            }
+            return room_fare;
+        };
+
+        if (promoCode) {
+            room_fare = applyPromoCode(room_fare, promoCode, checkInDate);
+        }
+
+        // Generate separate booking IDs for each room
+        const bookingIds = [];
+        for (let i = 0; i < number_of_Rooms; i++) {
+            const randomNumber = generateRandomNumber(6);
+            const booking_Id = `BKID${randomNumber}`;
+            bookingIds.push(booking_Id);
+
+            // Create booking object for each room
+            const booking = {
+                Hotel_Id: hotelId,
+                Hotel_name: hotel.Hotel_name,
+                customer_email: customer_email,
+                Booking_Id: booking_Id,
+                roomType: roomType,
+                customerId: customerId,
+                status: "pending",
+                checkIn: checkInDate,
+                checkOut: checkOutDate,
+                room_fare: room_fare,
+                bookedRoom: [],
+                guests: guests.slice(i * roomCapacity, (i + 1) * roomCapacity) // Slice guests for each room
+            };
+
+            // Save booking details in bookedRoomModel
+            await bookedRoomModel.create(booking);
+
+            // Send email to the hotel manager for each room
+            const emailContent = ` <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Booking Confirmation</title>
+                </head>
+                <body style="font-family: Arial, sans-serif; background-color: #f2f2f2; padding: 20px;">
+
+                    <div style="background-color: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);">
+                        <h2 style="color: #333; text-align: center; margin-bottom: 20px;">Booking Confirmation</h2>
+                        <p>A new booking request has arisen from<strong> ${customerName}  </strong> for <strong> ${hotel.Hotel_name}</strong> , <strong> ${i+1}</strong> Room</p>
+                    </div>
+
+                </body>
+                </html>`;
+
+            const emailContent1 = `<!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Booking Confirmation</title>
+                </head>
+                <body style="font-family: Arial, sans-serif; background-color: #f2f2f2; padding: 20px;">
+
+                    <div style="background-color: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);">
+                        <h2 style="color: #333; text-align: center; margin-bottom: 20px;">Booking Confirmation</h2>
+                        <p>Your Hotel Booking Request has been<strong> received. </strong>  A confirmation will be sent to you shortly</p>
+                        <p>If you have any questions, feel free to contact us.</p>
+                    </div>
+
+                </body>
+                </html>`;
+
+            sendBookingEmail(hotelManager_Email, `Hotel Booking ..!`, emailContent);
+            sendBookingEmail(customer_email, `Hotel Booking ..!`, emailContent1);
+        }
+
+        // Return success response with all booking IDs
+        return res
+
 
 __________________________
 
@@ -619,5 +849,149 @@ Meftah
 Chabet el Ameur
 Tizi Ghenif
 Beni Amrane
+
+
+
+----------------------------------------------------------
+
+
+npx create-react-app hotel-search
+cd hotel-search
+npm install @react-google-maps/api
+
+----------------
+Map component
+----------------
+
+import React, { useEffect, useState, useCallback } from 'react';
+import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
+
+const mapContainerStyle = {
+  width: '100vw',
+  height: '100vh'
+};
+
+const options = {
+  zoom: 8
+};
+
+const MapComponent = ({ hotels, currentLocation }) => {
+  return (
+    <LoadScript googleMapsApiKey="YOUR_GOOGLE_MAPS_API_KEY">
+      <GoogleMap mapContainerStyle={mapContainerStyle} center={currentLocation} zoom={options.zoom}>
+        {currentLocation && (
+          <Marker position={{ lat: currentLocation.lat, lng: currentLocation.lng }} label="You" />
+        )}
+        {hotels.map((hotel, index) => (
+          <Marker key={index} position={{ lat: hotel.lat, lng: hotel.lng }} label={hotel.name} />
+        ))}
+      </GoogleMap>
+    </LoadScript>
+  );
+};
+
+export default MapComponent;
+
+
+
+
+---------
+App.js
+---------
+import React, { useState, useEffect, useCallback } from 'react';
+import MapComponent from './MapComponent';
+
+const App = () => {
+  const [city, setCity] = useState('Agra');
+  const [checkIn, setCheckIn] = useState('2024-05-26');
+  const [checkOut, setCheckOut] = useState('2024-05-27');
+  const [hotels, setHotels] = useState([]);
+  const [currentLocation, setCurrentLocation] = useState(null);
+
+  const fetchHotels = useCallback(async () => {
+    const response = await fetch('http://13.51.205.211:2501/api/search_Hotel', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ city, checkIn, checkOut }),
+    });
+
+    const data = await response.json();
+    return data.hotels; // Adjust based on your API response structure
+  }, [city, checkIn, checkOut]);
+
+  const calculateDistance = (lat1, lng1, lat2, lng2) => {
+    const toRad = (x) => (x * Math.PI) / 180;
+
+    const R = 6371; // Radius of the Earth in km
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  useEffect(() => {
+    const getLocationAndHotels = async () => {
+      // Get current location
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            const userLocation = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            };
+            setCurrentLocation(userLocation);
+
+            // Fetch hotels
+            const fetchedHotels = await fetchHotels();
+            const nearbyHotels = fetchedHotels.filter((hotel) => {
+              const distance = calculateDistance(userLocation.lat, userLocation.lng, hotel.lat, hotel.lng);
+              return distance <= 15; // within 15 km
+            });
+            setHotels(nearbyHotels);
+          },
+          (error) => {
+            console.error('Error getting current location: ', error);
+          }
+        );
+      } else {
+        console.error('Geolocation is not supported by this browser.');
+      }
+    };
+
+    getLocationAndHotels();
+  }, [fetchHotels]);
+
+  return (
+    <div>
+      <h1>Hotel Search</h1>
+      <form onSubmit={(e) => e.preventDefault()}>
+        <label>
+          City:
+          <input type="text" value={city} onChange={(e) => setCity(e.target.value)} />
+        </label>
+        <label>
+          Check-In:
+          <input type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} />
+        </label>
+        <label>
+          Check-Out:
+          <input type="date" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} />
+        </label>
+        <button type="button" onClick={() => fetchHotels()}>
+          Search Hotels
+        </button>
+      </form>
+      {currentLocation && <MapComponent hotels={hotels} currentLocation={currentLocation} />}
+    </div>
+  );
+};
+
+export default App;
 
 

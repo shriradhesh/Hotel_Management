@@ -25,6 +25,10 @@ const promo_Coupon_Schema = new mongoose.Schema({
  },
       offer_description : {
      type : String,
+ },
+
+ limit : {
+   type : Number
  }
 
 }, { timestamps : true })

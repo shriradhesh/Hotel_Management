@@ -25,6 +25,10 @@ const HotelSchema = new mongoose.Schema({
            hotelType: {
             type: String
         },
+        commision_rate : {
+          type : Number
+        },            
+
         roomPricesByType : {
           type : String
         },

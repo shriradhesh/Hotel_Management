@@ -9,6 +9,7 @@
    const rating_review_Model = require('../models/rating_review_model')
 const customer_NotificationModel = require('../models/customerNotification')
 const promo_Coupon_Model = require('../models/promo_coupon')
+const TransactionModel = require('../models/transactionModel')
 
                                       /* customer Section */
       // Api for customer Register
@@ -476,7 +477,7 @@ const promo_Coupon_Model = require('../models/promo_coupon')
                 const { city, checkIn, checkOut } = req.body;
                 const today = new Date();
                 today.setHours(0, 0, 0, 0); // Resetting hours, minutes, seconds, and milliseconds
-                
+        
                 // Check for required fields
                 const requiredFields = ['city', 'checkIn', 'checkOut'];
                 for (const field of requiredFields) {
@@ -487,11 +488,11 @@ const promo_Coupon_Model = require('../models/promo_coupon')
                         });
                     }
                 }
-                
+        
                 // Convert checkIn and checkOut dates into Date objects
                 const checkInDate = new Date(checkIn);
                 const checkOutDate = new Date(checkOut);
-                
+        
                 // Check for valid check-in date
                 if (checkInDate < today) {
                     return res.status(400).json({
@@ -507,24 +508,25 @@ const promo_Coupon_Model = require('../models/promo_coupon')
                         message: `Check-out date must be after check-in date`
                     });
                 }
-
-                     // calculate number of days
-                     const oneDay =  24 * 60 * 60 * 1000
-                     const checkInTime = 12 * 60 * 60 * 1000;
-                     const checkOutTime = 10 * 60 * 60 * 1000;
-                     const daysCount = Math.round((checkOutDate.getTime() + checkOutTime - checkInDate.getTime() - checkInTime) / oneDay) || 1 ;
-
-                     
-                    
+        
+                // Calculate number of days
+                const oneDay = 24 * 60 * 60 * 1000;
+                const checkInTime = 12 * 60 * 60 * 1000;
+                const checkOutTime = 10 * 60 * 60 * 1000;
+                const daysCount = Math.round((checkOutDate.getTime() + checkOutTime - checkInDate.getTime() - checkInTime) / oneDay) || 1;
         
                 // Get hotels based on city
                 const hotels = await HotelModel.find({ city });
-                const roomPricesByType = {};
-                // Loop through each hotel to calculate availability
+        
+                const resultHotels = [];
+        
                 for (let hotel of hotels) {
                     let totalRooms = 0;
                     let availableRoomTypeCounts = {};
                     let bookedRoomTypeCounts = {};
+                    let roomPricesByType = {}; // Create a separate room prices object for each hotel
+                 
+              
 
                     const bookedRooms = await bookedRoomModel.find({
                         Hotel_Id: hotel.Hotel_Id,
@@ -534,132 +536,113 @@ const promo_Coupon_Model = require('../models/promo_coupon')
                             { status: "confirmed" },
                             { status: "pending" }
                         ],
-                       
                     });
-                      
-                    // Calculate total number of rooms in the hotel
+        
+                    // Calculate total number of rooms in the hotel and room prices
                     hotel.floors.forEach(floor => {
                         totalRooms += floor.rooms.length;
-                    });
-                    
-                            // Extract distinct room types and their prices from hotels
-                    hotels.forEach(hotel => {
-                        hotel.floors.forEach(floor => {
-                            floor.rooms.forEach(room => {
-                                const roomType = room.type;
-                                const baseroomPrice = room.price; 
-
-                                // calculate update room price based on daysCount
-                                const updatedRoomPrice = baseroomPrice * daysCount;
-
-                                // Store room price by room type
-                                if (!roomPricesByType[roomType]) {
-                                    roomPricesByType[roomType] = updatedRoomPrice;
-                                }
-                            });
+                        floor.rooms.forEach(room => {
+                            const roomType = room.type;
+                            const baseroomPrice = room.price;
+                           
+                          
+                           
+                            const updatedRoomPrice = (baseroomPrice * daysCount)  ;
+        
+                            if (!roomPricesByType[roomType]) {
+                                roomPricesByType[roomType] = updatedRoomPrice;
+                            }
+        
+                            if (!availableRoomTypeCounts[roomType]) {
+                                availableRoomTypeCounts[roomType] = 0;
+                            }
+                            availableRoomTypeCounts[roomType]++;
                         });
                     });
-                 
-                    // Loop through each available room to count room types
-            for (let floor of hotel.floors) {
-                for (let room of floor.rooms) {
-                    const roomType = room.type;
-                    if (!availableRoomTypeCounts[roomType]) {
-                        availableRoomTypeCounts[roomType] = 0;
+        
+                    // Count the total number of booked rooms and their types
+                    for (const booking of bookedRooms) {
+                        const roomType = booking.roomType;
+        
+                        if (roomType !== undefined && roomType !== null) {
+                            if (!bookedRoomTypeCounts[roomType]) {
+                                bookedRoomTypeCounts[roomType] = 0;
+                            }
+                            bookedRoomTypeCounts[roomType]++;
+                        }
                     }
-                    availableRoomTypeCounts[roomType]++;
-                }
-            }        
         
-        // Count the total number of booked rooms and their types
-        for (const booking of bookedRooms) {                  
-            const roomType = booking.roomType;               
+                    // Check availableRoomTypeCounts to ensure all room types are accounted for in bookedRoomTypeCounts
+                    for (const roomType in availableRoomTypeCounts) {
+                        if (!bookedRoomTypeCounts.hasOwnProperty(roomType)) {
+                            bookedRoomTypeCounts[roomType] = 0;
+                        }
+                    }
         
-            if (roomType !== undefined && roomType !== null) {
-                // Check if roomType is defined before using it
-                if (!bookedRoomTypeCounts[roomType]) {
-                    bookedRoomTypeCounts[roomType] = 0;
-                }
-                bookedRoomTypeCounts[roomType]++;
-            }
-        }
-        
-        // Check availableRoomTypeCounts to ensure all room types are accounted for in bookedRoomTypeCounts
-        for (const roomType in availableRoomTypeCounts) {
-            if (!bookedRoomTypeCounts.hasOwnProperty(roomType)) {
-                // If room type is missing, add it with a count of 0
-                bookedRoomTypeCounts[roomType] = 0;
-            }
-        }
-        
+                    hotel.totalRooms = totalRooms;
+                    hotel.availableRooms = totalRooms - bookedRooms.length; // Assuming each booking reserves one room
+                    hotel.bookedRoomsCount = bookedRooms.length;
+                    hotel.availableRoomTypeCounts = availableRoomTypeCounts;
+                    hotel.bookedRoomTypeCounts = bookedRoomTypeCounts;
+                    hotel.roomPricesByType = roomPricesByType;
 
+                   
+                  
+                    
+                    // Calculate average rating for the hotel
+                    const ratingsAndReviews = await rating_review_Model.find({ Hotel_Id: hotel.Hotel_Id });
+                    let totalRating = 0;
+                    let totalReviews = ratingsAndReviews.length;
         
-            hotel.totalRooms = totalRooms;
-            
-            hotel.availableRooms = totalRooms - bookedRooms.length; // Assuming each booking reserves one room
-            hotel.bookedRoomsCount = bookedRooms.length;
-          
-            hotel.availableRoomTypeCounts = availableRoomTypeCounts;
-            hotel.bookedRoomTypeCounts = bookedRoomTypeCounts;
-            hotel.roomPricesByType = roomPricesByType;
-
-            // Calculate average rating for the hotel
-        const ratingsAndReviews = await rating_review_Model.find({ Hotel_Id: hotel.Hotel_Id });
-        let totalRating = 0;
-        let totalReviews = ratingsAndReviews.length;
-
-        ratingsAndReviews.forEach(review => {
-            totalRating += review.rating;
-        });
-
-        hotel.averageRating = totalReviews > 0 ? totalRating / totalReviews : 0;
-    
-            // Remove unnecessary fields
-            delete hotel.__v;
-            delete hotel.createdAt;
-            delete hotel.updatedAt;
-        }
-
+                    ratingsAndReviews.forEach(review => {
+                        totalRating += review.rating;
+                    });
         
-        return res.status(200).json({
-            success: true,
-            message: "Hotels",
-            city : city, 
-            checkIn :checkIn , 
-            checkOut :checkOut ,            
-            hotels: hotels.map(hotel => ({
-                _id: hotel._id,
-                Hotel_Id: hotel.Hotel_Id,
-                Hotel_name: hotel.Hotel_name,               
-                address: hotel.address,
-                city: hotel.city,
-                manager_id: hotel.manager_id,
-                HotelImages: hotel.HotelImages,
-                hotelType: hotel.hotelType,
-                facilities: hotel.facilities,
-                aboutHotel: hotel.aboutHotel,
-                totalRooms: hotel.totalRooms,
-                bookedRoomsCount: hotel.bookedRoomsCount,
-                availableRooms: hotel.availableRooms,
-                enoughRoomsAvailable: hotel.enoughRoomsAvailable,
-                availableRoomTypeCounts: Object.keys(hotel.availableRoomTypeCounts).reduce((acc, key) => {
-                    acc[key] = hotel.availableRoomTypeCounts[key] - (hotel.bookedRoomTypeCounts[key] || 0);
-                    return acc;
-                }, {}),
-                bookedRoomTypeCounts: hotel.bookedRoomTypeCounts,
-                room_Price : roomPricesByType,
-                Rating  : hotel.averageRating || 5
-            }))
-        });
-               
+                    hotel.averageRating = totalReviews > 0 ? totalRating / totalReviews : 0;
+        
+        
+                    resultHotels.push({
+                        _id: hotel._id,
+                        Hotel_Id: hotel.Hotel_Id,
+                        Hotel_name: hotel.Hotel_name,
+                        address: hotel.address,
+                        city: hotel.city,
+                        manager_id: hotel.manager_id,
+                        HotelImages: hotel.HotelImages,
+                        hotelType: hotel.hotelType,
+                        facilities: hotel.facilities,
+                        aboutHotel: hotel.aboutHotel,
+                        totalRooms: hotel.totalRooms,
+                        bookedRoomsCount: hotel.bookedRoomsCount,
+                        availableRooms: hotel.availableRooms,
+                        availableRoomTypeCounts: Object.keys(hotel.availableRoomTypeCounts).reduce((acc, key) => {
+                            acc[key] = hotel.availableRoomTypeCounts[key] - (hotel.bookedRoomTypeCounts[key] || 0);
+                            return acc;
+                        }, {}),
+                        bookedRoomTypeCounts: hotel.bookedRoomTypeCounts,
+                        room_price : roomPricesByType, 
+                        Rating: hotel.averageRating || 5
+                    });
+                }                    
+
+                return res.status(200).json({
+                    success: true,
+                    message: "Hotels",
+                    city: city,
+                    checkIn: checkIn,
+                    checkOut: checkOut,
+                    hotels: resultHotels
+                });
+        
             } catch (error) {
                 console.error(error);
                 res.status(500).json({
                     success: false,
-                    message: "Server error"
+                    message: "Server error",
+                    error_message : error.message
                 });
             }
-        };
+        };          
 
   
         
@@ -712,7 +695,8 @@ const promo_Coupon_Model = require('../models/promo_coupon')
                     message: 'Hotel not found'
                 });
             }
-    
+                var commision_rate = hotel.commision_rate || 0
+              
             const manager_id = hotel.manager_id;
             // Access room price based on roomType
                 let room_fare;
@@ -789,7 +773,7 @@ const promo_Coupon_Model = require('../models/promo_coupon')
                             } else {
                                 regularGuestsCount++;
                             }
-                        });
+                        }); 
 
                         // Only two children under the age of 8 are allowed
                         if (childrenCount > 2) {
@@ -808,9 +792,10 @@ const promo_Coupon_Model = require('../models/promo_coupon')
                                 message: `Guests limit exceeded. Maximum allowed guests for ${number_of_Rooms} ${roomType} room(s) is ${roomCapacity * number_of_Rooms}.`
                             });
                         }
-
-                   
-
+                            // set the commision
+                                       
+                            var commision_price = (room_fare * (commision_rate / 100)) 
+                                       
                         // check the promocode is valid or not
             if (promoCode) {
                 const check_promo_code = await promo_Coupon_Model.findOne({
@@ -823,18 +808,34 @@ const promo_Coupon_Model = require('../models/promo_coupon')
                         message: `Applied promo code is  not valid`
                     });
                 }
+                
+                               // check if the promo  code usage has exceeded its limit
+                               const promo_codeUsageCount = await bookedRoomModel.countDocuments({ promoCode })
+                               if(promo_codeUsageCount > check_promo_code.limit)
+                                {
+                                  return res.status(400).json({
+                                    success: false,
+                                    message: `Promo code usage limit has been exceeded`
+                                });
+                                }
+
+
                     if (checkInDate < check_promo_code.start_Date || checkInDate > check_promo_code.end_Date) {
                         return res.status(400).json({
                             success: false,
                             message: `Applied promo code is not valid for the selected check-in date`
                         });
-                    }
+                    }                    
+
                  
+
                     const discount = check_promo_code.discount / 100;
                     const discount_price = room_fare * discount;
                     room_fare = room_fare - discount_price;
-                
+                    
             }
+
+            
                             // Generate separate booking IDs for each room
                     const bookingIds = [];
                     for (let i = 0; i < number_of_Rooms; i++) {
@@ -842,7 +843,7 @@ const promo_Coupon_Model = require('../models/promo_coupon')
                         const booking_Id = `BKID${randomNumber}`; 
                         bookingIds.push(booking_Id);
 
-
+                          
                         
                         // Create booking object for each room
                         const booking = {
@@ -858,6 +859,7 @@ const promo_Coupon_Model = require('../models/promo_coupon')
                             room_fare: room_fare,
                             bookedRoom: [],
                             promoCode : promoCode || null,
+                            commision_price : commision_price,
                             guests: guests.slice(i * roomCapacity, (i + 1) * roomCapacity) // Slice guests for each room
                         };
             

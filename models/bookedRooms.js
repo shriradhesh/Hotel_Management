@@ -89,6 +89,9 @@ const bookedRoomSchema = new mongoose.Schema({
     },
     promoCode : {
         type : String
+    },
+    commision_price : {
+         type : Number
     }
 }, { timestamps: true });
 

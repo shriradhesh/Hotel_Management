@@ -13,6 +13,7 @@ const customer_NotificationModel = require('../models/customerNotification')
 const notificationEmail = require('../utils/NotificationEmail')
 const Hotel_NotificationModel = require('../models/Hotel_notification')
 const promo_Coupon_Model = require('../models/promo_coupon')
+const promoCodeEmail = require('../utils/promoCode_email')
 
                                     /* Super Admin section */
 
@@ -278,7 +279,7 @@ const promo_Coupon_Model = require('../models/promo_coupon')
 
 
 
-                                           /*  Hotel manager Section */
+                                                      /*  Hotel manager Section */
 
         // Api for create Hotel Manager
 
@@ -621,10 +622,10 @@ const promo_Coupon_Model = require('../models/promo_coupon')
 
         const create_Hotel = async (req, res) => {
             try {
-                const { Hotel_name, address, aboutHotel, hotelType, city, facilities, manager_id } = req.body;
+                const { Hotel_name, address, aboutHotel, hotelType, city, facilities, manager_id , commision_rate } = req.body;
         
                 // Check for required fields
-                const requiredFields = ['Hotel_name', 'address', 'hotelType', 'aboutHotel', 'city', 'facilities', 'manager_id'];
+                const requiredFields = ['Hotel_name', 'address', 'hotelType', 'aboutHotel', 'city', 'facilities', 'manager_id' , 'commision_rate'];
                 for (const field of requiredFields) {
                     if (!req.body[field]) {
                         return res.status(400).json({
@@ -717,7 +718,9 @@ const promo_Coupon_Model = require('../models/promo_coupon')
                     city,
                     status: 1,
                     HotelImages: imagePaths,
-                    floors: []
+                    floors: [],
+                    commision_rate : commision_rate
+                   
                 });
         
                 await newHotel.save();
@@ -1200,7 +1203,7 @@ const promo_Coupon_Model = require('../models/promo_coupon')
        }
             
 
-                                        /* Privacy Policy Section */
+                                                    /* Privacy Policy Section */
                               
          // Api for get all Hotel privacy and policy
          const getAllPrivacy_policy = async( req , res)=>{
@@ -1660,18 +1663,18 @@ const promo_Coupon_Model = require('../models/promo_coupon')
                       }
          
 
-                                         /*  PROMO code and coupon */
+                                                     /*  PROMO code and coupon */
         
         
             // Api for create Promo code 
             const create_promo_code = async (req, res) => {
                 try {
                    
-                    const { offer_title, offer_description, promo_code, discount, start_Date, end_Date } = req.body;
+                    const { offer_title, offer_description, promo_code, discount, start_Date, end_Date , limit } = req.body;
             
                     
                     // Check for required fields
-                    const requiredFields = { offer_title, offer_description, promo_code, discount, start_Date, end_Date };
+                    const requiredFields = { offer_title, offer_description, promo_code, discount, start_Date, end_Date , limit };
                     for (const [field, value] of Object.entries(requiredFields)) {
                         if (!value) {
                             return res.status(400).json({
@@ -1702,10 +1705,58 @@ const promo_Coupon_Model = require('../models/promo_coupon')
                         promo_code,
                         discount,
                         start_Date,
-                        end_Date
+                        end_Date,
+                        limit
                     });
             
                     await new_promo.save();
+
+
+                    const all_customer = await customerModel.find({ })
+
+                    const formatDate = (dateString) => {
+                      return new Date(dateString).toISOString().slice(0, 10);
+                  };
+                  
+                  const formattedStartDate = formatDate(start_Date);
+                  const formattedEndDate = formatDate(end_Date);
+                  
+          
+                   const emailContent = `
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <head>
+                        <meta charset="UTF-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    </head>
+                    <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 0;">
+                        <div style="max-width: 600px; margin: 20px auto; background-color: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);">
+                            <div style="background-color: #4CAF50; color: white; padding: 10px; text-align: center; border-radius: 8px 8px 0 0;">
+                                <h1 style="margin: 0;">New Promotional Offer!</h1>
+                            </div>
+                            <div style="padding: 20px; text-align: left; color: #333333;">
+                                <p>Hello,</p>
+                                <p>We are excited to announce a new promotional offer!</p>
+                                <div style="margin: 20px 0; padding: 10px; border-left: 4px solid #4CAF50; background-color: #f9f9f9;">
+                                    <p><strong>Offer Title:</strong> ${offer_title}</p>
+                                    <p><strong>Description:</strong> ${offer_description}</p>
+                                    <p><strong>Promo Code:</strong> ${promo_code}</p>
+                                    <p><strong>Discount:</strong> ${discount}%</p>
+                                    <p><strong>Valid From:</strong> ${formattedStartDate}</p>
+                                    <p><strong>To:</strong> ${formattedEndDate}</p>
+                                </div>
+                                <p>Hurry up and make the most of this offer!</p>
+                            </div>                            
+                        </div>
+                    </body>
+                    </html>
+                    `;
+                    
+                    
+                    
+              for (const customer of all_customer) {
+                promoCodeEmail ( customer.email , 'New promoCode Available' , emailContent )
+              }
             
                     return res.status(200).json({
                         success: true,
@@ -1794,6 +1845,7 @@ const promo_Coupon_Model = require('../models/promo_coupon')
             check_promo_code.offer_description = offer_description;
             check_promo_code.discount = discount;
             check_promo_code.promo_code = promo_code;
+            check_promo_code.limit = limit;
             
             // Save the updated promo code
             await check_promo_code.save();
@@ -1859,7 +1911,108 @@ const promo_Coupon_Model = require('../models/promo_coupon')
      }
 
         
-                    
+    // Api for get  commision from the particular Hotel
+    const get_commission_from_hotel = async (req, res) => {
+        try {
+            const hotelId = req.params.hotelId;
+            const { start_Date, end_Date } = req.body;
+
+            if(!start_Date)
+                {
+                    return res.status(400).json({
+                         success : false ,
+                         message : 'start Date required'
+                    })
+                }
+    
+            if(!end_Date)
+                {
+                    return res.status(400).json({
+                         success : false ,
+                         message : 'end_Date required'
+                    })
+                }
+    
+            // Check if hotelId is provided
+            if (!hotelId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Hotel Id required'
+                });
+            }
+    
+            // Check if hotel exists
+            const check_hotel = await HotelModel.findOne({ Hotel_Id: hotelId });
+            if (!check_hotel) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'No Hotel found'
+                });
+            }
+    
+            // Find bookings within the given date range for the specified hotel
+            const bookings = await bookedRoomModel.find({
+                Hotel_Id: hotelId,
+                checkIn : { $gte: start_Date, $lte: end_Date }
+            });
+                 // Sum up commission prices from the bookings
+                let totalCommission = 0;
+                bookings.forEach(booking => {
+                    // Add commission price of each booking to the total
+                    totalCommission += booking.commision_price;
+                });
+    
+            // Send the commissions as response
+            return res.status(200).json({
+                success: true,
+                commision : `commision from Hotel : ${hotelId} is : ${totalCommission}`
+            });
+    
+        } catch (error) {
+            return res.status(500).json({
+                success: false,
+                message: 'Server error',
+                error_message: error.message
+            });
+        }
+    };
+             
+
+    // Api for get total commissoin
+             const get_total_commission = async ( req , res ) => {
+                     try {
+                         // check for all hotel booking
+                      const check_all_booking = await bookedRoomModel.find({ })
+
+                      if(!check_all_booking)
+                        {
+                            return res.status(400).json({
+                                 success : false ,
+                                 message : 'no booking found'
+                            })
+                        }
+
+                        let totalCommission = 0;
+                        check_all_booking.forEach(booking => {
+                            // Add commission price of each booking to the total
+                            totalCommission += booking.commision_price;
+                        })
+
+                          return res.status(200).json({
+                                 success : true ,
+                                 message : 'total commission',
+                                 total_commission : totalCommission
+                          })
+
+
+                     } catch (error) {
+                         return res.status(500).json({
+                             success : false ,
+                             message : 'server error',
+                             error_message : error.message
+                         })
+                     }
+             } 
             
 
 module.exports = {
@@ -1869,5 +2022,6 @@ module.exports = {
     getAllHotels , getHotel , updateHotel , active_inactive_Hotel , addRooms , getAll_floors_wise_Rooms_of_Hotel ,
      hotel_managerLogin , Dashboard_all_count , getAllPrivacy_policy , AllTerm_condition , getAllHotels_Rating_Reviews,
      sendNotification_to_allCustomer , sendNotification_to_customer ,sendNotification_to_allHotels, sendNotifications,
-     getAllNotifications , create_promo_code , get_promo_codes , update_promo_code , delete_promo_code
+     getAllNotifications , create_promo_code , get_promo_codes , update_promo_code , delete_promo_code , get_commission_from_hotel,
+     get_total_commission
 }

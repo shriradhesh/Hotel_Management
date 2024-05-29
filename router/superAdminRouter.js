@@ -87,6 +87,13 @@ const superAdminController = require('../controller/superAdminController')
                        router.put('/update_promo_code/:promo_code_id', superAdminController.update_promo_code)
 // Api for delete_promo_code
                        router.delete('/delete_promo_code/:promo_code_id', superAdminController.delete_promo_code)
+
+
+                                  /* commission */
+// ApI for get commission for the particular hotel
+                        router.post('/get_commission_from_hotel/:hotelId', superAdminController.get_commission_from_hotel)
+// Api for get_total_commission
+                        router.get('/get_total_commission', superAdminController.get_total_commission)
  
 
 module.exports = router
