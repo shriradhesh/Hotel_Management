@@ -8,6 +8,10 @@ const customerRouter = require('./router/customerRouter')
 const superAdminRouter = require('./router/superAdminRouter')
 const HotelManagerRouter = require('./router/HotelmanagerRouter')
 
+
+const paypal = require('./paypal');
+const checkoutNodeJssdk = require('@paypal/checkout-server-sdk');
+
 // database configuration
   const db = require('./config/db')
 // Middleware configuration
@@ -17,6 +21,16 @@ app.use(bodyParser.urlencoded({ extended : true }))
 app.use(cors())
 app.use(express.static('uploads'))
 
+
+
+                                  /*  PayPal configuration */
+
+                    
+
+                                   
+               
+
+                              
 
 
 // Api for Router configuration

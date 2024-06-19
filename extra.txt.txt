@@ -1,5 +1,7 @@
-  
 
+
+
+   
 email content
 ______________
 
@@ -35,6 +37,8 @@ ______________
                 message: `Invalid check-in or check-out dates`
             });
         }
+     
+       
 
         // Calculate number of days
         const oneDay = 24 * 60 * 60 * 1000;
@@ -993,5 +997,285 @@ const App = () => {
 };
 
 export default App;
+
+
+
+
+-----------------------------------------------------
+
+paypal integration ---
+
+-----------------
+
+Step-by-Step Guide to Integrate PayPal in Node.js
+Step 1: Set Up PayPal Developer Account and App
+Create a PayPal Developer Account:
+
+Go to the PayPal Developer site and sign up or log in.
+Create a REST API App:
+
+Navigate to the Dashboard.
+Click on "My Apps & Credentials."
+Click "Create App."
+Give your app a name and choose the sandbox or live environment.
+Click "Create App."
+Get API Credentials:
+
+After creating the app, you will get a Client ID and Secret. These are needed to authenticate your API requests.
+Step 2: Initialize a Node.js Project
+Create a new directory and navigate into it:
+
+bash
+Copy code
+mkdir paypal-integration
+cd paypal-integration
+Initialize a new Node.js project:
+
+bash
+Copy code
+npm init -y
+Install required packages:
+
+bash
+Copy code
+npm install express @paypal/checkout-server-sdk
+Step 3: Set Up Your Node.js Server
+Create the server file:
+Create a file named server.js and add the following code:
+
+javascript
+Copy code
+const express = require('express');
+const app = express();
+const port = 3000;
+
+app.use(express.json());
+
+app.listen(port, () => {
+    console.log(`Server running at http://localhost:${port}/`);
+});
+Run the server:
+
+bash
+Copy code
+node server.js
+You should see Server running at http://localhost:3000/ in your terminal.
+
+Step 4: Configure PayPal SDK
+Create a PayPal configuration file:
+Create a file named paypal.js and add the following code:
+
+javascript
+Copy code
+const checkoutNodeJssdk = require('@paypal/checkout-server-sdk');
+
+function environment() {
+    let clientId = "YOUR_CLIENT_ID";
+    let clientSecret = "YOUR_CLIENT_SECRET";
+
+    return new checkoutNodeJssdk.core.SandboxEnvironment(clientId, clientSecret);
+    // For live environment, use:
+    // return new checkoutNodeJssdk.core.LiveEnvironment(clientId, clientSecret);
+}
+
+function client() {
+    return new checkoutNodeJssdk.core.PayPalHttpClient(environment());
+}
+
+module.exports = { client };
+Replace YOUR_CLIENT_ID and YOUR_CLIENT_SECRET with your actual PayPal credentials.
+
+Step 5: Create Payment Routes
+Add routes to handle PayPal payment creation and capture:
+Update server.js with the following code:
+
+javascript
+Copy code
+const express = require('express');
+const app = express();
+const port = 3000;
+const paypal = require('./paypal');
+const checkoutNodeJssdk = require('@paypal/checkout-server-sdk');
+
+app.use(express.json());
+
+app.post('/create-order', async (req, res) => {
+    let request = new checkoutNodeJssdk.orders.OrdersCreateRequest();
+    request.prefer("return=representation");
+    request.requestBody({
+        intent: 'CAPTURE',
+        purchase_units: [{
+            amount: {
+                currency_code: 'USD',
+                value: '100.00' // Replace with the actual amount
+            }
+        }]
+    });
+
+    try {
+        const order = await paypal.client().execute(request);
+        res.json({ id: order.result.id });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Something went wrong');
+    }
+});
+
+app.post('/capture-order', async (req, res) => {
+    const { orderId } = req.body;
+
+    let request = new checkoutNodeJssdk.orders.OrdersCaptureRequest(orderId);
+    request.requestBody({});
+
+    try {
+        const capture = await paypal.client().execute(request);
+        res.json(capture.result);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Something went wrong');
+    }
+});
+
+app.listen(port, () => {
+    console.log(`Server running at http://localhost:${port}/`);
+});
+Step 6: Test the Integration
+Use Postman or any API testing tool to create and capture an order.
+
+Create Order:
+
+Send a POST request to http://localhost:3000/create-order.
+You should get an order ID in response.
+Capture Order:
+
+Send a POST request to http://localhost:3000/capture-order with the order ID in the request body as JSON.
+Example body: { "orderId": "ORDER_ID_FROM_CREATE_ORDER_RESPONSE" }
+Step 7: Integrate Front-End for Complete Checkout Experience
+Create an HTML file:
+Create a file named index.html with the following code:
+
+html
+Copy code
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PayPal Integration</title>
+    <script src="https://www.paypal.com/sdk/js?client-id=YOUR_CLIENT_ID"></script>
+</head>
+<body>
+    <div id="paypal-button-container"></div>
+    <script>
+        paypal.Buttons({
+            createOrder: function(data, actions) {
+                return fetch('/create-order', {
+                    method: 'post',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({})
+                }).then(function(res) {
+                    return res.json();
+                }).then(function(orderData) {
+                    return orderData.id;
+                });
+            },
+            onApprove: function(data, actions) {
+                return fetch('/capture-order', {
+                    method: 'post',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        orderId: data.orderID
+                    })
+                }).then(function(res) {
+                    return res.json();
+                }).then(function(orderData) {
+                    console.log('Capture result', orderData, JSON.stringify(orderData, null, 2));
+                    alert('Transaction completed');
+                });
+            }
+        }).render('#paypal-button-container');
+    </script>
+</body>
+</html>
+Replace YOUR_CLIENT_ID with your actual PayPal client ID.
+
+Serve the HTML file using Express:
+Update server.js to serve the index.html file:
+
+javascript
+Copy code
+const express = require('express');
+const path = require('path');
+const app = express();
+const port = 3000;
+const paypal = require('./paypal');
+const checkoutNodeJssdk = require('@paypal/checkout-server-sdk');
+
+app.use(express.json());
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.post('/create-order', async (req, res) => {
+    let request = new checkoutNodeJssdk.orders.OrdersCreateRequest();
+    request.prefer("return=representation");
+    request.requestBody({
+        intent: 'CAPTURE',
+        purchase_units: [{
+            amount: {
+                currency_code: 'USD',
+                value: '100.00' // Replace with the actual amount
+            }
+        }]
+    });
+
+    try {
+        const order = await paypal.client().execute(request);
+        res.json({ id: order.result.id });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Something went wrong');
+    }
+});
+
+app.post('/capture-order', async (req, res) => {
+    const { orderId } = req.body;
+
+    let request = new checkoutNodeJssdk.orders.OrdersCaptureRequest(orderId);
+    request.requestBody({});
+
+    try {
+        const capture = await paypal.client().execute(request);
+        res.json(capture.result);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Something went wrong');
+    }
+});
+
+app.listen(port, () => {
+    console.log(`Server running at http://localhost:${port}/`);
+});
+
+
+
+
+Run the server and open the browser:
+
+Start the server: node server.js.
+Open your browser and navigate to http://localhost:3000.
+You should now see the PayPal button and be able to complete a transaction.
+
+Summary
+Set Up PayPal Developer Account: Obtain Client ID and Secret.
+Initialize Node.js Project: Install necessary packages.
+Set Up Server: Create Express server and configure PayPal SDK.
+Create Payment Routes: Implement endpoints to create and capture orders.
+Test API: Use tools like Postman to test endpoints.
+Integrate Front-End: Create an HTML file to handle client-side PayPal transactions.
+This guide covers the complete process of integrating PayPal into a Node.js backend, from setting up credentials to handling transactions and integrating with a front-end interface.
 
 

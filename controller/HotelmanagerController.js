@@ -356,8 +356,7 @@ const updateRoom = async (req, res) => {
                 error_message: error.message
             });
         }
-    };
-    
+    };    
     
     
     // Api for assign room to the pending booking
@@ -652,8 +651,7 @@ const updateRoom = async (req, res) => {
 
               return res.status(200).json({
                                    success : true ,
-                                   createdmessage : 'Privacy and Policy created Successfully',
-                                 
+                                   createdmessage : 'Privacy and Policy created Successfully',                             
 
               })
        }
@@ -854,7 +852,8 @@ const updateRoom = async (req, res) => {
              }
                  
 
-                                       /*Hotel Rating & Review Section */
+                                       /* Hotel Rating & Review Section */
+
         // Api for get particular Hotel Rating Reviews
           const getRating_Reviews = async( req , res)=>{
             try {
@@ -912,6 +911,7 @@ const updateRoom = async (req, res) => {
            
 
                                              /* Notification section */
+
     
         const getHotel_notificaition = async( req , res)=>{
             try {
@@ -930,6 +930,7 @@ const updateRoom = async (req, res) => {
                              Hotel_Id : Hotel_Id,
                              status : 1
                    })
+
                   if(!Hotel_notification)
                   {
                     return res.status(400).json({
@@ -942,9 +943,9 @@ const updateRoom = async (req, res) => {
                         success : true ,
                         message : 'Hotel Notifications',
                         notification_Count : Hotel_notification.length,
-                        Notifications : Hotel_notification
-                       
+                        Notifications : Hotel_notification                       
                   })
+
             } catch (error) {
                 return res.status(500).json({
                          success : false ,
@@ -1052,8 +1053,7 @@ const updateRoom = async (req, res) => {
                 
                 </body>
                 </html>
-                `;
-                
+                `;                
 
                 // Send email notification to the user
                 await notificationEmail(customer.email, 'Notification', messageContent);

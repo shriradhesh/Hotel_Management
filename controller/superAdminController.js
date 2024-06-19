@@ -2015,6 +2015,9 @@ const promoCodeEmail = require('../utils/promoCode_email')
              } 
             
 
+                                                          /*  CMS Section */
+                                                          
+
 module.exports = {
 
     login , getsuperAdmin , updateSuperAdmin_details , superAdmin_change_password , createHotel_manager,

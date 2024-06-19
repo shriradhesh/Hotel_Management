@@ -10,6 +10,7 @@
 const customer_NotificationModel = require('../models/customerNotification')
 const promo_Coupon_Model = require('../models/promo_coupon')
 const TransactionModel = require('../models/transactionModel')
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
                                       /* customer Section */
       // Api for customer Register
@@ -474,7 +475,7 @@ const TransactionModel = require('../models/transactionModel')
          // Api for search Hotel
          const search_Hotel = async (req, res) => {
             try {
-                const { city, checkIn, checkOut } = req.body;
+                const { city, checkIn, checkOut  } = req.body;
                 const today = new Date();
                 today.setHours(0, 0, 0, 0); // Resetting hours, minutes, seconds, and milliseconds
         
@@ -488,6 +489,7 @@ const TransactionModel = require('../models/transactionModel')
                         });
                     }
                 }
+
         
                 // Convert checkIn and checkOut dates into Date objects
                 const checkInDate = new Date(checkIn);
@@ -543,8 +545,7 @@ const TransactionModel = require('../models/transactionModel')
                         totalRooms += floor.rooms.length;
                         floor.rooms.forEach(room => {
                             const roomType = room.type;
-                            const baseroomPrice = room.price;
-                           
+                            const baseroomPrice = room.price;                           
                           
                            
                             const updatedRoomPrice = (baseroomPrice * daysCount)  ;
@@ -584,9 +585,7 @@ const TransactionModel = require('../models/transactionModel')
                     hotel.bookedRoomsCount = bookedRooms.length;
                     hotel.availableRoomTypeCounts = availableRoomTypeCounts;
                     hotel.bookedRoomTypeCounts = bookedRoomTypeCounts;
-                    hotel.roomPricesByType = roomPricesByType;
-
-                   
+                    hotel.roomPricesByType = roomPricesByType;                  
                   
                     
                     // Calculate average rating for the hotel
@@ -622,6 +621,7 @@ const TransactionModel = require('../models/transactionModel')
                         bookedRoomTypeCounts: hotel.bookedRoomTypeCounts,
                         room_price : roomPricesByType, 
                         Rating: hotel.averageRating || 5
+                    
                     });
                 }                    
 
@@ -631,6 +631,7 @@ const TransactionModel = require('../models/transactionModel')
                     city: city,
                     checkIn: checkIn,
                     checkOut: checkOut,
+                    Hotel_count : resultHotels.length ,
                     hotels: resultHotels
                 });
         
@@ -652,7 +653,7 @@ const TransactionModel = require('../models/transactionModel')
     const bookHotel = async (req, res) => {
         try {
             const hotelId = req.params.hotelId;
-            const { checkIn, checkOut, roomType, customerId, number_of_Rooms , promoCode } = req.body;
+            const { checkIn, checkOut, roomType, customerId, number_of_Rooms , promoCode , payment_key , payment } = req.body;
             let guests = req.body.guests;
     
             // Check for required fields
@@ -797,17 +798,17 @@ const TransactionModel = require('../models/transactionModel')
                             var commision_price = (room_fare * (commision_rate / 100)) 
                                        
                         // check the promocode is valid or not
-            if (promoCode) {
-                const check_promo_code = await promo_Coupon_Model.findOne({
-                    promo_code: promoCode
-                });
+                        if (promoCode) {
+                            const check_promo_code = await promo_Coupon_Model.findOne({
+                                promo_code: promoCode
+                            });
 
-                if (!check_promo_code || new Date() > check_promo_code.end_Date) {
-                    return res.status(400).json({
-                        success: false,
-                        message: `Applied promo code is  not valid`
-                    });
-                }
+                            if (!check_promo_code || new Date() > check_promo_code.end_Date) {
+                                return res.status(400).json({
+                                    success: false,
+                                    message: `Applied promo code is  not valid`
+                                });
+                            }
                 
                                // check if the promo  code usage has exceeded its limit
                                const promo_codeUsageCount = await bookedRoomModel.countDocuments({ promoCode })
@@ -825,9 +826,7 @@ const TransactionModel = require('../models/transactionModel')
                             success: false,
                             message: `Applied promo code is not valid for the selected check-in date`
                         });
-                    }                    
-
-                 
+                    }                                     
 
                     const discount = check_promo_code.discount / 100;
                     const discount_price = room_fare * discount;
@@ -835,15 +834,60 @@ const TransactionModel = require('../models/transactionModel')
                     
             }
 
-            
-                            // Generate separate booking IDs for each room
-                    const bookingIds = [];
-                    for (let i = 0; i < number_of_Rooms; i++) {
-                        const randomNumber = generateRandomNumber(6);
-                        const booking_Id = `BKID${randomNumber}`; 
-                        bookingIds.push(booking_Id);
 
+                          // check for payment_key 
+                          // 1 for stripe 
+                          // 2 for pay pal
                           
+                            if(payment_key === 1)
+                                {
+                                        try {
+                                              // convert room fare into Cents
+                                             const room_fare_in_Cents = room_fare * 100                        
+                                               
+                                          const charge = await stripe.charges.create({
+                                            amount: room_fare_in_Cents,
+                                            currency: "usd",
+                                            description: "Hotel Room Booking",
+                                            source: payment,                         // Token Id
+                                            receipt_email: email,
+                                          });
+
+                                          
+                                          const charge_status = charge.status
+                                                          // Generate separate booking IDs for each room
+                                const bookingIds = [];
+                                for (let i = 0; i < number_of_Rooms; i++) {
+                                    const randomNumber = generateRandomNumber(6);
+                                    const booking_Id = `BKID${randomNumber}`; 
+                                    bookingIds.push(booking_Id);                          
+                             
+                           
+                                    const existingTransaction = await TransactionModel.findOne({
+                                             booking_Id : booking_Id,
+                                   });
+
+                             if (existingTransaction) {
+                               return res.status(400).json({
+                                 success: false,
+                                 message: "Booking has already been paid",
+                               });
+                             }
+                   
+                             // Store the payment transaction
+                             const transaction = new TransactionModel({
+                               booking_Id: booking_Id,
+                               chargeId: charge.id ,
+                               amount: room_fare,
+                               currency: "usd",
+                               payment_status: charge_status ,
+                               payment_key: payment_key ,
+                               promoCode : promoCode || null,
+                               discount_price : discount_price || 0
+                             });
+                   
+                             await transaction.save();       
+                             
                         
                         // Create booking object for each room
                         const booking = {
@@ -864,60 +908,99 @@ const TransactionModel = require('../models/transactionModel')
                         };
             
                 // Save booking details in bookedRoomModel
-                await bookedRoomModel.create(booking);
-    
-                // Send email to the hotel manager for each room
-                const emailContent = ` <!DOCTYPE html>
-                <html lang="en">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Booking Cancellation</title>
-                </head>
-                <body style="font-family: Arial, sans-serif; background-color: #f2f2f2; padding: 20px;">
+                             await bookedRoomModel.create(booking);
+                    
+                            }                           
 
-                    <div style="background-color: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);">
-                        <h2 style="color: #333; text-align: center; margin-bottom: 20px;">Booking Confirmation</h2>
-                        <p>A new booking request has arisen from<strong> ${customerName}  </strong> for <strong> ${hotel.Hotel_name}</strong> , <strong> ${i+1}</strong> Room</p>
-                       
-                    </div>
-
-                </body>
-                </html>`;
-               
-                
-                    // send E-mail to customer regarding Booking
-
-                const emailContent1 =  `<!DOCTYPE html>
-                <html lang="en">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Booking Cancellation</title>
-                </head>
-                <body style="font-family: Arial, sans-serif; background-color: #f2f2f2; padding: 20px;">
-
-                    <div style="background-color: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);">
-                        <h2 style="color: #333; text-align: center; margin-bottom: 20px;">Booking Confirmation</h2>
-                        <p>Your Hotel Booking Request has been<strong> received. </strong>  A confirmation will be sent to you shortly</p>
-                        <p>If you have any questions, feel free to contact us.</p>
-                    </div>
-
-                </body>
-                </html>
-            `;
-               
-                sendBookingEmail(hotelManager_Email, `Hotel Booking ..!`, emailContent);
-                sendBookingEmail(customer_email, `Hotel Booking ..!`, emailContent1);
+            } catch (error) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Error while making stripe payment',
+                    error_message: error.message
+                });
             }
-    
-            // Return success response with all booking IDs
-            return res.status(200).json({
-                success: true,
-                message: "Hotel booking request sent successfully",
-                
-            });
-    
+        }
+              // check for paypal
+
+              if( payment_key === 2)
+                {
+                    try {
+                        
+                    } catch (error) {
+                        return res.status(400).json({
+                             success : false ,
+                             message : ' Error while making payment using paypal ',
+                             error_message : error.message
+                        })
+                    }
+                }
+
+                const generateAndSendEmail = async (payment_key) => {
+                    
+                            // Send email to the hotel manager for each room
+                            const emailContent = ` <!DOCTYPE html>
+                            <html lang="en">
+                            <head>
+                                <meta charset="UTF-8">
+                                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                                <title>Booking Confirmation</title>
+                            </head>
+                            <body style="font-family: Arial, sans-serif; background-color: #f2f2f2; padding: 20px;">
+            
+                                <div style="background-color: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);">
+                                    <h2 style="color: #333; text-align: center; margin-bottom: 20px;">Booking Confirmation</h2>
+                                    <p>A new booking request has arisen from<strong> ${customerName}  </strong> for <strong> ${hotel.Hotel_name}</strong> , <strong> ${i+1}</strong> Room</p>
+                                </div>
+            
+                            </body>
+                            </html>`;
+            
+                            sendBookingEmail(hotelManager_Email, `Hotel Booking ..!`, emailContent);
+            
+                            // Send E-mail to customer regarding Booking
+                            const emailContent1 = `<!DOCTYPE html>
+                            <html lang="en">
+                            <head>
+                                <meta charset="UTF-8">
+                                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                                <title>Booking Confirmation</title>
+                            </head>
+                            <body style="font-family: Arial, sans-serif; background-color: #f2f2f2; padding: 20px;">
+            
+                                <div style="background-color: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);">
+                                    <h2 style="color: #333; text-align: center; margin-bottom: 20px;">Booking Confirmation</h2>
+                                    <p>Your Hotel Booking Request has been<strong> received. </strong>  A confirmation will be sent to you shortly</p>
+                                    <p>If you have any questions, feel free to contact us.</p>
+                                </div>
+            
+                            </body>
+                            </html>`;
+            
+                            sendBookingEmail(customer_email, `Hotel Booking ..!`, emailContent1);
+                                    
+                                        }
+
+                                        switch (payment_key) {
+                                            case 1: // Stripe
+                                            await generateAndSendEmail(1);
+                                            break;
+                                            case 2: // paypal
+                                            await generateAndSendEmail(2);
+                                            break;                    
+                                            default:
+                                            // Handle unsupported payment method
+                                            return res.status(400).json({
+                                                success: false,
+                                                message: 'Unsupported payment method',
+                                            });
+                                        }
+                 
+
+                            // Return success response with all booking IDs
+                            return res.status(200).json({
+                                success: true,
+                                message: "Hotel booking request sent successfully",
+                            });
         } catch (error) {
             console.error(error);
             res.status(500).json({
