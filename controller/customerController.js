@@ -1451,7 +1451,7 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
                     return res.status(200).json({
                         success: true,
                         message: 'Notification seen '
-                    });
+                    });  
                 } else {
                     return res.status(400).json({
                         success: false,
