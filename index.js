@@ -9,8 +9,7 @@ const superAdminRouter = require('./router/superAdminRouter')
 const HotelManagerRouter = require('./router/HotelmanagerRouter')
 
 
-const paypal = require('./paypal');
-const checkoutNodeJssdk = require('@paypal/checkout-server-sdk');
+
 
 // database configuration
   const db = require('./config/db')
@@ -40,7 +39,7 @@ app.use(express.static('uploads'))
      app.use('/api', HotelManagerRouter)
 
 app.use((req, res, next) => {
-res.header('Access-Control-Allow-Origin', 'http://localhost:2501/api/'); 
+res.header('Access-Control-Allow-Origin', '*'); 
 res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
 res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
 next();

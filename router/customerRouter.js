@@ -29,6 +29,8 @@ const upload = require('../upload')
 
 // APi for search Hotel
         router.post('/search_Hotel', customerController.search_Hotel)
+// Api for filter hotel
+        router.post('/filter_Hotel', customerController.filter_Hotel)
 
 // APi for bookHotel
         router.post('/bookHotel/:hotelId', customerController.bookHotel)

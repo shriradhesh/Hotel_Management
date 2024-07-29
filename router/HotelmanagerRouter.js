@@ -61,6 +61,15 @@ const HotelManagerController = require('../controller/HotelmanagerController')
                    router.get('/seen_Hotel_notification/:notification_id', HotelManagerController.seen_Hotel_notification)
     // APi for sendNotification_to_allCustomer
                    router.post('/sendNotification_to_allCustomer', HotelManagerController.sendNotification_to_allCustomer)
+
+                                   /* Exports and Imports */
+    // Api for export_all_bookings_of_hotel
+                   router.get('/export_all_bookings_of_hotel/:Hotel_Id', HotelManagerController.export_all_bookings_of_hotel)
+
+                    
+                                  /*   Transaction section */
+    // Api for get_all_transaction_of_hotel
+                router.get('/get_all_transaction_of_hotel/:Hotel_Id', HotelManagerController.get_all_transaction_of_hotel)
                                
 
 

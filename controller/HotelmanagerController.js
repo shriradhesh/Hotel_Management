@@ -13,7 +13,8 @@ const rating_review_Model = require('../models/rating_review_model');
 const Hotel_NotificationModel = require('../models/Hotel_notification');
 const customer_NotificationModel = require('../models/customerNotification')
 const customerModel = require('../models/customerModel')
-const notificationEmail = require('../utils/NotificationEmail')
+const notificationEmail = require('../utils/NotificationEmail');
+const TransactionModel = require('../models/transactionModel');
  
                                  
 
@@ -394,7 +395,7 @@ const updateRoom = async (req, res) => {
             if (!booking) {
                 return res.status(400).json({
                     success: false,
-                    message: `You already assign Room to Booking : ${booking_Id}`
+                    message: `You already assign Room to Booking : ${booking_Id} or booking not found`
                 });
             }
                     const Hotel_Id = booking.Hotel_Id
@@ -1090,6 +1091,280 @@ const updateRoom = async (req, res) => {
             });
             }
         };
+
+
+        // Api for export all bookings of the hotel
+             
+        const export_all_bookings_of_hotel = async (req, res) => {
+            try {
+              const { Hotel_Id } = req.params;
+              // Check for hotel id
+              if (!Hotel_Id) {
+                return res.status(400).json({
+                  success: false,
+                  message: 'Hotel Id required',
+                });
+              }
+          
+              // Check for hotel
+              const hotel = await HotelModel.findOne({ Hotel_Id: Hotel_Id });
+          
+              if (!hotel) {
+                return res.status(400).json({
+                  success: false,
+                  message: 'Hotel not exist',
+                });
+              }
+          
+              // Fetch all bookings for the hotel
+              const bookings = await bookedRoomModel.find({ Hotel_Id: Hotel_Id });
+          
+              if (bookings.length === 0) {
+                return res.status(400).json({
+                  success: false,
+                  message: 'No bookings found for this hotel',
+                });
+              }
+          
+              // Create Excel workbook and worksheet
+              const ExcelJS = require('exceljs');
+              const workbook = new ExcelJS.Workbook();
+              const worksheet = workbook.addWorksheet('Bookings');
+          
+              // Define the Excel Header
+              worksheet.columns = [
+                { 
+                    header: 'Hotel Id', 
+                    key: 'Hotel_Id', 
+                    width: 15
+                 },
+                { 
+                    header: 'Booking Id',
+                    key: 'Booking_Id',
+                    width: 20 
+                },
+                { 
+                    header: 'Customer Id',
+                    key: 'customerId',
+                    width: 20 
+                },
+                { 
+                    header: 'Customer Email',
+                    key: 'customer_email',
+                    width: 30
+                 },
+                { 
+                    header: 'Hotel Name',
+                    key: 'Hotel_name',
+                    width: 20
+                 },
+                { 
+                    header: 'Number of Rooms',
+                    key: 'number_of_Rooms',
+                    width: 15 
+                },
+                { 
+                    header: 'Room Fare',
+                    key: 'room_fare',
+                    width: 10 
+                },
+                { 
+                    header: 'Status',
+                    key: 'status',
+                    width: 15 
+                },
+                { 
+                    header: 'Room Type',
+                    key: 'roomType',
+                     width: 15
+                
+                    },
+                { 
+                    header: 'Check-In',
+                    key: 'checkIn',
+                    width: 20
+                 },
+                { 
+                    header: 'Check-Out',
+                    key: 'checkOut',
+                    width: 20
+                 },               
+                { 
+                    header: 'Floor Number',
+                    key: 'floorNumber',
+                    width: 15 
+                },
+                { 
+                    header: 'Room Number',
+                    key: 'roomNumber',
+                    width: 15 
+                },
+                {
+                     header: 'Room Available',
+                     key: 'roomAvailable',
+                     width: 15                    
+                },
+
+                {
+                     header: 'Room Price',
+                     key: 'roomPrice',
+                     width: 10
+                },
+                { 
+                    header: 'Guest First Name',
+                    key: 'guestFirstName',
+                    width: 20
+                 },
+                { 
+                    header: 'Guest Last Name',
+                    key: 'guestLastName',
+                    width: 20
+                 },
+                { 
+                    header: 'Guest Age',
+                    key: 'guestAge',
+                    width: 10 
+                },
+                {
+                     header: 'Guest Phone Number',
+                     key: 'guestPhoneNumber',
+                     width: 20 
+                },
+                { 
+                    header: 'Total Guests',
+                    key: 'totalGuests',
+                    width: 10 
+                },
+                { 
+                    header: 'Promo Code',
+                     key: 'promoCode',
+                     width: 15
+                 },
+                { 
+                    header: 'Commission Price',
+                    key: 'commissionPrice',
+                     width: 15 
+                },
+              ];
+          
+              // Add rows to the worksheet
+              bookings.forEach((booking) => {
+                const baseRow = {
+                  Hotel_Id: booking.Hotel_Id,
+                  Booking_Id: booking.Booking_Id,
+                  customerId: booking.customerId,
+                  customer_email: booking.customer_email,
+                  Hotel_name: booking.Hotel_name,
+                  number_of_Rooms: booking.number_of_Rooms,
+                  room_fare: booking.room_fare,
+                  status: booking.status,
+                  roomType: booking.roomType,
+                  checkIn: booking.checkIn,
+                  checkOut: booking.checkOut,                
+                  totalGuests: booking.totalguests,
+                  promoCode: booking.promoCode,
+                  commissionPrice: booking.commision_price,
+                };
+          
+                if (booking.bookedRoom.length > 0) {
+                  booking.bookedRoom.forEach((floor) => {
+                    floor.rooms.forEach((room) => {
+                      worksheet.addRow({
+                        ...baseRow,
+                        floorNumber: floor.floorNumber,
+                        roomNumber: room.roomNumber,
+                        roomAvailable: room.available,
+                        roomPrice: room.price,
+                      });
+                    });
+                  });
+                } else {
+                  worksheet.addRow(baseRow);
+                }
+          
+                if (booking.guests.length > 0) {
+                  booking.guests.forEach((guest) => {
+                    worksheet.addRow({
+                      ...baseRow,
+                      guestFirstName: guest.firstName,
+                      guestLastName: guest.lastName,
+                      guestAge: guest.age,
+                      guestPhoneNumber: guest.phoneNumber,
+                    });
+                  });
+                } else {
+                  worksheet.addRow(baseRow);
+                }
+              });
+          
+              // Write to buffer
+              const buffer = await workbook.xlsx.writeBuffer();
+          
+              // Set response headers for file download
+              res.setHeader(
+                'Content-Disposition',
+                'attachment; filename=bookings.xlsx'
+              );
+              res.setHeader(
+                'Content-Type',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+              );
+          
+              // Send the buffer
+              res.send(buffer);
+            } catch (error) {
+              return res.status(500).json({
+                success: false,
+                message: 'Server error',
+                error_message: error.message,
+              });
+            }
+          };
+          
+         
+                                                /* Transaction sectiom */
+
+                const get_all_transaction_of_hotel = async ( req , res )=> {
+                     try {
+                        const Hotel_Id = req.params.Hotel_Id
+                        // check for Hotel_Id
+      
+                        if(!Hotel_Id)
+                        {
+                            return res.status(400).json({
+                             success : false ,
+                             message : 'Hotel Id required'
+                            })
+                        }
+
+                        // check for all transaction of the hotel
+
+                        const all_transaction = await TransactionModel.find({ Hotel_Id : Hotel_Id })
+                        if(!all_transaction)
+                        {
+                            return res.status(400).json({
+                                 success : false ,
+                                 message : `No Transaction found for the Hotel : ${Hotel_Id}`
+                            })
+                        }
+                                // sort the transaction 
+                           const sorted_transaction = all_transaction.sort(( a, b ) =>  { b.createdAt - a.createdAt })
+
+                           return res.status(200).json({
+                               success : true ,
+                               message : 'all transaction of the Hotel',
+                               all_transaction : sorted_transaction
+                           })
+
+                     } catch (error) {
+                          return res.status(500).json({
+                              success : false ,
+                              message : 'server error',
+                              error_message : error.message
+                          })
+                     }
+                }
+          
             
 
 module.exports = {
@@ -1097,5 +1372,6 @@ module.exports = {
       getHotelRoom_for_pending_bookings, assingRoom_to_booking , getAllBookings_of_Hotel,
       updateRoom , searchBooking , privacyAndPolicy , getPrivacy_policy , term_condition,
       getHotel_term_condition , getAllComplains , getRating_Reviews , getHotel_notificaition,
-      seen_Hotel_notification , sendNotification_to_allCustomer
+      seen_Hotel_notification , sendNotification_to_allCustomer , export_all_bookings_of_hotel,
+      get_all_transaction_of_hotel
 }

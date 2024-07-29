@@ -4,25 +4,23 @@ const transactionSchema = new mongoose.Schema({
        bookingId : {
         type : String,
         required : true ,
-        unique : true
+       
        },
        transaction_Id : {
         type : String,
         // required : true,
+       },
+       Hotel_Id : {
+          type : String
        },
        amount : {
         type : Number,
        
        },
        payment_status: {
-        type: String,       
-        
-    },
-    
-    createdAt: {
-        type: Date,
-        default: Date.now,
-      },
+        type: String,      
+         },   
+  
       payment_key : {
         type : Number
       },     
@@ -34,7 +32,7 @@ const transactionSchema = new mongoose.Schema({
    }
 
 
-})
+} , { timestamps : true })
 const TransactionModel = mongoose.model('Transaction', transactionSchema);
 
 module.exports = TransactionModel;

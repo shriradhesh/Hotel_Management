@@ -646,6 +646,222 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
         };          
 
   
+
+        // APi for filter hotel
+        const filter_Hotel = async (req, res) => {
+            try {
+                const { city, checkIn, checkOut } = req.body;
+                const { room_price, rating, hotel_type, availableRooms  } = req.query;
+                
+               
+        
+                const today = new Date();
+                today.setHours(0, 0, 0, 0); // Resetting hours, minutes, seconds, and milliseconds
+            
+                // Check for required fields
+                const requiredFields = ['city', 'checkIn', 'checkOut'];
+                for (const field of requiredFields) {
+                    if (!req.body[field]) {
+                        return res.status(400).json({
+                            success: false,
+                            message: `Missing ${field.replace('_', ' ')} field`
+                        });
+                    }
+                }
+            
+                // Convert checkIn and checkOut dates into Date objects
+                const checkInDate = new Date(checkIn);
+                const checkOutDate = new Date(checkOut);
+            
+                // Check for valid check-in date
+                if (checkInDate < today) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `You can't select a previous date for check-in`
+                    });
+                }
+            
+                // Check if check-out date is after check-in date
+                if (checkOutDate <= checkInDate) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Check-out date must be after check-in date`
+                    });
+                }
+            
+                // Calculate number of days
+                const oneDay = 24 * 60 * 60 * 1000;
+                const checkInTime = 12 * 60 * 60 * 1000;
+                const checkOutTime = 10 * 60 * 60 * 1000;
+                const daysCount = Math.round((checkOutDate.getTime() + checkOutTime - checkInDate.getTime() - checkInTime) / oneDay) || 1;
+            
+                // Get hotels based on city
+                const hotels = await HotelModel.find({ city });
+            
+                const resultHotels = [];
+            
+                for (let hotel of hotels) {
+                    let totalRooms = 0;
+                    let availableRoomTypeCounts = {};
+                    let bookedRoomTypeCounts = {};
+                    let roomPricesByType = {};
+            
+                    const bookedRooms = await bookedRoomModel.find({
+                        Hotel_Id: hotel.Hotel_Id,
+                        checkIn: { $lte: new Date(checkOutDate.getTime() + 24 * 60 * 60 * 1000) },
+                        checkOut: { $gte: checkInDate },
+                        $or: [
+                            { status: "confirmed" },
+                            { status: "pending" }
+                        ],
+                    });
+            
+                    // Calculate total number of rooms in the hotel and room prices
+                    hotel.floors.forEach(floor => {
+                        totalRooms += floor.rooms.length;
+                        floor.rooms.forEach(room => {
+                            const roomType = room.type;
+                            const baseRoomPrice = room.price;
+            
+                            const updatedRoomPrice = (baseRoomPrice * daysCount);
+            
+                            if (!roomPricesByType[roomType]) {
+                                roomPricesByType[roomType] = updatedRoomPrice;
+                            }
+            
+                            if (!availableRoomTypeCounts[roomType]) {
+                                availableRoomTypeCounts[roomType] = 0;
+                            }
+                            availableRoomTypeCounts[roomType]++;
+                        });
+                    });
+            
+                    // Count the total number of booked rooms and their types
+                    for (const booking of bookedRooms) {
+                        const roomType = booking.roomType;
+            
+                        if (roomType !== undefined && roomType !== null) {
+                            if (!bookedRoomTypeCounts[roomType]) {
+                                bookedRoomTypeCounts[roomType] = 0;
+                            }
+                            bookedRoomTypeCounts[roomType]++;
+                        }
+                    }
+            
+                    // Check availableRoomTypeCounts to ensure all room types are accounted for in bookedRoomTypeCounts
+                    for (const roomType in availableRoomTypeCounts) {
+                        if (!bookedRoomTypeCounts.hasOwnProperty(roomType)) {
+                            bookedRoomTypeCounts[roomType] = 0;
+                        }
+                    }
+            
+                    hotel.totalRooms = totalRooms;
+                    hotel.availableRooms = totalRooms - bookedRooms.length; // Assuming each booking reserves one room
+                    hotel.bookedRoomsCount = bookedRooms.length;
+                    hotel.availableRoomTypeCounts = availableRoomTypeCounts;
+                    hotel.bookedRoomTypeCounts = bookedRoomTypeCounts;
+                    hotel.roomPricesByType = roomPricesByType;
+            
+                    // Calculate average rating for the hotel
+                    const ratingsAndReviews = await rating_review_Model.find({ Hotel_Id: hotel.Hotel_Id });
+                    let totalRating = 0;
+                    let totalReviews = ratingsAndReviews.length;
+            
+                    ratingsAndReviews.forEach(review => {
+                        totalRating += review.rating;
+                    });
+            
+                    hotel.averageRating = totalReviews > 0 ? totalRating / totalReviews : 0;
+            
+                    // Apply filters
+                    let passesFilters = true;
+            
+                    // Define priceRange
+                    const priceRange = 0.1; // 10% range for price filter
+        
+                    if (room_price) {
+                        const priceInt = parseInt(room_price);
+                        if (Number.isNaN(priceInt)) {
+                            return res.status(400).json({
+                                success: false,
+                                message: `Invalid room_price value`
+                            });
+                        }
+            
+                        // Check if roomPricesByType has values and handle accordingly
+                        const isWithinRange = Object.keys(roomPricesByType).length > 0 && Object.values(roomPricesByType).some(price => {
+                            const lowerBound = price * (1 - priceRange);
+                            const upperBound = price * (1 + priceRange);
+                            return priceInt >= lowerBound && priceInt <= upperBound;
+                        });
+            
+                        if (!isWithinRange) {
+                            passesFilters = false;
+                        }
+                    }
+            
+                    if (rating && hotel.averageRating < parseFloat(rating)) {
+                        passesFilters = false;
+                    }
+            
+                    if (hotel_type && hotel.hotelType !== hotel_type) {
+                        passesFilters = false;
+                    }
+            
+                    if (availableRooms && hotel.availableRooms < parseInt(availableRooms)) {
+                        passesFilters = false;
+                    }
+            
+                   
+            
+                    if (passesFilters) {
+                        resultHotels.push({
+                            _id: hotel._id,
+                            Hotel_Id: hotel.Hotel_Id,
+                            Hotel_name: hotel.Hotel_name,
+                            address: hotel.address,
+                            city: hotel.city,
+                            manager_id: hotel.manager_id,
+                            HotelImages: hotel.HotelImages,
+                            hotelType: hotel.hotelType,
+                            facilities: hotel.facilities,
+                            aboutHotel: hotel.aboutHotel,
+                            totalRooms: hotel.totalRooms,
+                            bookedRoomsCount: hotel.bookedRoomsCount,
+                            availableRooms: hotel.availableRooms,
+                            availableRoomTypeCounts: Object.keys(hotel.availableRoomTypeCounts).reduce((acc, key) => {
+                                acc[key] = hotel.availableRoomTypeCounts[key] - (hotel.bookedRoomTypeCounts[key] || 0);
+                                return acc;
+                            }, {}),
+                            bookedRoomTypeCounts: hotel.bookedRoomTypeCounts,
+                            room_price: roomPricesByType,
+                            Rating: hotel.averageRating || 5
+                        });
+                    }
+                }
+            
+                return res.status(200).json({
+                    success: true,
+                    message: "Filtered Hotels",
+                    city: city,
+                    checkIn: checkIn,
+                    checkOut: checkOut,
+                    Hotel_count: resultHotels.length,
+                    hotels: resultHotels
+                });
+            
+            } catch (error) {
+                console.error(error);
+                res.status(500).json({
+                    success: false,
+                    message: "Server error",
+                    error_message: error.message
+                });
+            }
+        };
+        
+        
+        
         
  
     // APi for book Hotel
@@ -838,88 +1054,120 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
                           // check for payment_key 
                           // 1 for stripe 
                           // 2 for pay pal
-                          
-                            if(payment_key === 1)
-                                {
-                                        try {
-                                              // convert room fare into Cents
-                                             const room_fare_in_Cents = room_fare * 100                        
-                                               
-                                          const charge = await stripe.charges.create({
-                                            amount: room_fare_in_Cents,
-                                            currency: "usd",
-                                            description: "Hotel Room Booking",
-                                            source: payment,                         // Token Id
-                                            receipt_email: email,
-                                          });
-
-                                          
-                                          const charge_status = charge.status
-                                                          // Generate separate booking IDs for each room
-                                const bookingIds = [];
-                                for (let i = 0; i < number_of_Rooms; i++) {
-                                    const randomNumber = generateRandomNumber(6);
-                                    const booking_Id = `BKID${randomNumber}`; 
-                                    bookingIds.push(booking_Id);                          
-                             
-                           
-                                    const existingTransaction = await TransactionModel.findOne({
-                                             booking_Id : booking_Id,
-                                   });
-
-                             if (existingTransaction) {
-                               return res.status(400).json({
-                                 success: false,
-                                 message: "Booking has already been paid",
-                               });
-                             }
-                   
-                             // Store the payment transaction
-                             const transaction = new TransactionModel({
-                               booking_Id: booking_Id,
-                               chargeId: charge.id ,
-                               amount: room_fare,
-                               currency: "usd",
-                               payment_status: charge_status ,
-                               payment_key: payment_key ,
-                               promoCode : promoCode || null,
-                               discount_price : discount_price || 0
-                             });
-                   
-                             await transaction.save();       
-                             
+                          if (payment_key === 1) {
+                            try {
+                                // Convert room fare into cents
+                                const room_fare_in_Cents = room_fare * 100;
                         
-                        // Create booking object for each room
-                        const booking = {
-                            Hotel_Id: hotelId,
-                            Hotel_name: hotel.Hotel_name,
-                            customer_email: customer_email,
-                            Booking_Id: booking_Id,
-                            roomType: roomType,
-                            customerId: customerId,
-                            status: "pending",
-                            checkIn: checkInDate,
-                            checkOut: checkOutDate,
-                            room_fare: room_fare,
-                            bookedRoom: [],
-                            promoCode : promoCode || null,
-                            commision_price : commision_price,
-                            guests: guests.slice(i * roomCapacity, (i + 1) * roomCapacity) // Slice guests for each room
-                        };
-            
-                // Save booking details in bookedRoomModel
-                             await bookedRoomModel.create(booking);
-                    
-                            }                           
-
-            } catch (error) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Error while making stripe payment',
-                    error_message: error.message
-                });
-            }
-        }
+                                // Create charge with Stripe
+                                const charge = await stripe.charges.create({
+                                    amount: room_fare_in_Cents,
+                                    currency: "usd",
+                                    description: "Hotel Room Booking",
+                                    source: payment, // Token Id
+                                    receipt_email: email,
+                                });
+                        
+                                const charge_status = charge.status;
+                        
+                                // Check if the charge was successful
+                                if (charge_status === 'succeeded') {
+                                    const bookingIds = [];
+                                    for (let i = 0; i < number_of_Rooms; i++) {
+                                        const randomNumber = generateRandomNumber(6);
+                                        const booking_Id = `BKID${randomNumber}`;
+                                        bookingIds.push(booking_Id);
+                        
+                                        const existingTransaction = await TransactionModel.findOne({ booking_Id });
+                        
+                                        if (existingTransaction) {
+                                            return res.status(400).json({
+                                                success: false,
+                                                message: "Booking has already been paid",
+                                            });
+                                        }
+                        
+                                        // Store the payment transaction
+                                        const transaction = new TransactionModel({
+                                            booking_Id,
+                                            chargeId: charge.id,
+                                            Hotel_Id  : hotelId,
+                                            amount: room_fare,
+                                            currency: "usd",
+                                            payment_status: charge_status,
+                                            payment_key,
+                                            promoCode: promoCode || null,
+                                            discount_price: discount_price || 0,
+                                        });
+                        
+                                        await transaction.save();
+                        
+                                        // Create booking object for each room
+                                        const booking = {
+                                            Hotel_Id: hotelId,
+                                            Hotel_name: hotel.Hotel_name,
+                                            customer_email: customer_email,
+                                            Booking_Id: booking_Id,
+                                            roomType: roomType,
+                                            customerId: customerId,
+                                            status: "pending",
+                                            checkIn: checkInDate,
+                                            checkOut: checkOutDate,
+                                            room_fare: room_fare,
+                                            bookedRoom: [],
+                                            promoCode: promoCode || null,
+                                            commision_price: commision_price,
+                                            guests: guests.slice(i * roomCapacity, (i + 1) * roomCapacity) // Slice guests for each room
+                                        };
+                        
+                                        // Save booking details in bookedRoomModel
+                                        await bookedRoomModel.create(booking);
+                                    }
+                        
+                                    return res.status(200).json({
+                                        success: true,
+                                        message: 'Booking successful',
+                                        bookingIds: bookingIds
+                                    });
+                                } else {
+                                    const bookingIds = [];
+                                    for (let i = 0; i < number_of_Rooms; i++) {
+                                        const randomNumber = generateRandomNumber(6);
+                                        const booking_Id = `BKID${randomNumber}`;
+                                        bookingIds.push(booking_Id);
+                        
+                                        // Store the payment transaction with failed status
+                                        const transaction = new TransactionModel({
+                                            booking_Id,
+                                            chargeId: charge.id,
+                                            Hotel_Id  : hotelId,
+                                            amount: room_fare,
+                                            currency: "usd",
+                                            payment_status: charge_status,
+                                            payment_key,
+                                            promoCode: promoCode || null,
+                                            discount_price: discount_price || 0,
+                                        });
+                        
+                                        await transaction.save();
+                                    }
+                        
+                                    return res.status(400).json({
+                                        success: false,
+                                        message: 'Payment failed',
+                                        bookingIds: bookingIds
+                                    });
+                                }
+                            } catch (error) {
+                                return res.status(400).json({
+                                    success: false,
+                                    message: 'Error while making stripe payment',
+                                    error_message: error.message
+                                });
+                            }
+                        }
+                        
+                        
               // check for paypal
 
               if( payment_key === 2)
@@ -1476,5 +1724,5 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
    module.exports = {
       register_customer , logincustomer , updatecustomer , getcustomer_Details , getAllcustomer , customer_change_pass , 
       deleteCustomer , active_inactive_customer , search_Hotel , bookHotel , getUpcomingBookings , getRecent_Bookings ,
-      createComplain , cancelBooking , createRatingReview , customer_Notification , seen_customer_notification 
+      createComplain , cancelBooking , createRatingReview , customer_Notification , seen_customer_notification , filter_Hotel 
    } 
