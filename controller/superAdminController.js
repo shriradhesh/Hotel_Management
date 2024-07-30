@@ -14,6 +14,7 @@ const notificationEmail = require('../utils/NotificationEmail')
 const Hotel_NotificationModel = require('../models/Hotel_notification')
 const promo_Coupon_Model = require('../models/promo_coupon')
 const promoCodeEmail = require('../utils/promoCode_email')
+const TransactionModel = require('../models/transactionModel');
 
                                     /* Super Admin section */
 
@@ -2014,6 +2015,97 @@ const promoCodeEmail = require('../utils/promoCode_email')
                      }
              } 
             
+                  // Api for dashboard count
+                
+                  const DashBoard_Count = async ( req , res )=> {
+                    try {
+                              // check for all customer 
+                              const all_customer = await customerModel.find()
+                              // check for all bookings
+                              const all_bookings = await bookedRoomModel.find()
+                              // check for all transactions
+                              const all_transactions = await TransactionModel.find()
+                              // check for all Hotels
+                              const all_hotel = await HotelModel.find()
+                              
+                             return res.status(200).json({
+                                  success : true ,
+                                  message : 'Dashboard count',
+                                  all_customers : all_customer.length,
+                                  all_bookings : all_bookings.length,
+                                  all_transactions : all_transactions.length,
+                                  all_hotel : all_hotel.length
+                             })
+                    } catch (error) {
+                        return res.status(500).json({
+                            success : false ,
+                            message : 'server error',
+                            error_message : error.message
+                        })
+                    }
+             }
+
+
+    // Api for get all transaction 
+                  const all_transaction = async ( req , res )=> {
+                     try {
+                            // check for all transaction
+
+                            const all_transaction = await TransactionModel.find()
+                            if(!all_transaction)
+                            {
+                                return res.status(400).json({
+                                     success : false ,
+                                     message : 'no transaction found'
+                                })
+                            }
+                              // sort all transaction
+
+                              const sorted_transaction = all_transaction.sort(( a , b )=> { b.createdAt - a.createdAt })
+                               
+                              return res.status(200).json({
+                                 success : true ,
+                                 message : 'all transaction',
+                                 all_transaction : sorted_transaction
+                              })
+                     } catch (error) {
+                         return res.status(500).json({
+                             success : false ,
+                             message : 'server error',
+                             error_message : error.message
+                         })
+                     }
+                  }
+
+            // APi for get total amount in transaction table
+  const totalTransactionAmount = async (req, res) => {
+    try {
+      // Aggregate to calculate the total amount directly in the database
+      const result = await TransactionModel.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalAmount: { $sum: "$amount" }
+          }
+        }
+      ]);
+  
+      const totalAmount = result.length > 0 ? result[0].totalAmount : 0;
+  
+      return res.status(200).json({
+        success: true,
+        SuccessMessage: "Total amount calculated successfully",
+        totalAmount: totalAmount
+      });
+    } catch (error) {
+      console.error("Error calculating total transaction amount:", error);
+      return res.status(500).json({
+        success: false,
+        ServerErrorMessage: "Server error while calculating total amount"
+      });
+    }
+  };
+  
 
                                                           /*  CMS Section */
                                                           
@@ -2026,5 +2118,5 @@ module.exports = {
      hotel_managerLogin , Dashboard_all_count , getAllPrivacy_policy , AllTerm_condition , getAllHotels_Rating_Reviews,
      sendNotification_to_allCustomer , sendNotification_to_customer ,sendNotification_to_allHotels, sendNotifications,
      getAllNotifications , create_promo_code , get_promo_codes , update_promo_code , delete_promo_code , get_commission_from_hotel,
-     get_total_commission
+     get_total_commission , DashBoard_Count , all_transaction , totalTransactionAmount
 }

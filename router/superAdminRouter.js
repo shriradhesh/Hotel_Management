@@ -94,6 +94,17 @@ const superAdminController = require('../controller/superAdminController')
                         router.post('/get_commission_from_hotel/:hotelId', superAdminController.get_commission_from_hotel)
 // Api for get_total_commission
                         router.get('/get_total_commission', superAdminController.get_total_commission)
+
+                                    /* Dashboard count */
+// Api for DashBoard_Count
+                        router.get('/DashBoard_Count', superAdminController.DashBoard_Count)
+// Api for totalTransactionAmount
+                        router.get('/totalTransactionAmount', superAdminController.totalTransactionAmount)
+                                     
+                                     /* Tranasaction Sections */
+// Api for get all_transaction
+                        router.get('/all_transaction', superAdminController.all_transaction)
+
  
 
 module.exports = router

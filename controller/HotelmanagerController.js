@@ -1324,6 +1324,7 @@ const updateRoom = async (req, res) => {
          
                                                 /* Transaction sectiom */
 
+                // Api for get all transaction of the hotel
                 const get_all_transaction_of_hotel = async ( req , res )=> {
                      try {
                         const Hotel_Id = req.params.Hotel_Id
@@ -1366,6 +1367,8 @@ const updateRoom = async (req, res) => {
                 }
           
             
+    
+
 
 module.exports = {
       get_Hotels_of_HotelManager , active_inactive_Room , getAll_pending_Booking_Request ,
