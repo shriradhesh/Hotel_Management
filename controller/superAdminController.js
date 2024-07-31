@@ -15,7 +15,7 @@ const Hotel_NotificationModel = require('../models/Hotel_notification')
 const promo_Coupon_Model = require('../models/promo_coupon')
 const promoCodeEmail = require('../utils/promoCode_email')
 const TransactionModel = require('../models/transactionModel');
-
+const contact_usModel = require('../models/contact_us')
                                     /* Super Admin section */
 
     // APi for login superAdmin
@@ -1953,7 +1953,7 @@ const TransactionModel = require('../models/transactionModel');
     
             // Find bookings within the given date range for the specified hotel
             const bookings = await bookedRoomModel.find({
-                Hotel_Id: hotelId,
+                Hotel_Id : hotelId,
                 checkIn : { $gte: start_Date, $lte: end_Date }
             });
                  // Sum up commission prices from the bookings
@@ -2094,20 +2094,22 @@ const TransactionModel = require('../models/transactionModel');
   
       return res.status(200).json({
         success: true,
-        SuccessMessage: "Total amount calculated successfully",
+        message: "amount calculated successfully",
         totalAmount: totalAmount
       });
+
     } catch (error) {
-      console.error("Error calculating total transaction amount:", error);
+      
       return res.status(500).json({
         success: false,
-        ServerErrorMessage: "Server error while calculating total amount"
+        message : "server error",
+        error_message : error.message
       });
     }
   };
-  
 
-                                                          /*  CMS Section */
+
+                                                            /*  CMS Section */
                                                           
 
 module.exports = {
@@ -2118,5 +2120,5 @@ module.exports = {
      hotel_managerLogin , Dashboard_all_count , getAllPrivacy_policy , AllTerm_condition , getAllHotels_Rating_Reviews,
      sendNotification_to_allCustomer , sendNotification_to_customer ,sendNotification_to_allHotels, sendNotifications,
      getAllNotifications , create_promo_code , get_promo_codes , update_promo_code , delete_promo_code , get_commission_from_hotel,
-     get_total_commission , DashBoard_Count , all_transaction , totalTransactionAmount
+     get_total_commission , DashBoard_Count , all_transaction , totalTransactionAmount , 
 }

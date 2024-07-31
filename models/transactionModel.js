@@ -2,8 +2,7 @@ const mongoose = require ('mongoose');
 const transactionSchema = new mongoose.Schema({
 
        bookingId : {
-        type : String,
-        required : true ,
+        type : String,       
        
        },
        transaction_Id : {

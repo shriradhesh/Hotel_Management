@@ -373,6 +373,7 @@ const updateRoom = async (req, res) => {
                     message: 'Booking Id required'
                 });
             }
+
             if (typeof floorNumber !== 'number' || floorNumber < 0) {
                 return res.status(400).json({
                     success: false,
@@ -391,6 +392,28 @@ const updateRoom = async (req, res) => {
                 Booking_Id: booking_Id,
                 status: 'pending'
             });
+            
+              // check for hotel
+              const Hotel = await HotelModel.findOne({ Hotel_Id : booking.Hotel_Id })
+               // check for Hotel manager
+               const hotel_manager = await userModel.findOne({ manager_id : Hotel.manager_id })
+               // check for transaction
+                const transaction = await TransactionModel.findOne({ bookingId : booking_Id })
+                   
+                   let payment_method = ''
+                     if(transaction.payment_key === 1)
+                     {
+                          payment_method = 'Stripe'
+                     }
+                     else if( transaction.payment_key === 2)
+                     {
+                        payment_method = 'paypal'
+                     }
+                     else
+                     {
+                         payment_method = 'Cash'
+                     }
+               
     
             if (!booking) {
                 return res.status(400).json({
@@ -398,13 +421,10 @@ const updateRoom = async (req, res) => {
                     message: `You already assign Room to Booking : ${booking_Id} or booking not found`
                 });
             }
-                    const Hotel_Id = booking.Hotel_Id
-                    const Hotel_name = booking.Hotel_name
-                    const customerId = booking.customerId
-                    const customer_email = booking.customer_email
-                    const checkInDate = booking.checkIn
-                    const checkOutDate = booking.checkOut
-                    const roomType = booking.roomType
+                    
+                    const Number_of_guests = booking.guests.length
+                    const discount_price = transaction.discount_price
+                    const paid_amount = transaction.amount
 
 
             // Ensure only one floor is added
@@ -434,56 +454,194 @@ const updateRoom = async (req, res) => {
 
             const bookingContent = `
                 <!DOCTYPE html>
-                <html lang="en">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Hotel Booking Details</title>
-                </head>
-                <body style="font-family: Arial, sans-serif; background-color: #f2f2f2; padding: 20px;">
-    
-                    <div style="background-color: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);">
-                        <h2 style="color: #333; text-align: center; margin-bottom: 20px; text-transform: uppercase; font-size: 24px;">Hotel Booking Details</h2>
-    
-                        <table style="width: 100%; border-collapse: collapse;">
-                            <tr>
-                                <th style="background-color: #4CAF50; color: #fff; padding: 10px;">Hotel Information</th>
-                                <th style="background-color: #4CAF50; color: #fff; padding: 10px;">Booking Details</th>
-                            </tr>
-                            <tr>
-                                <td style="vertical-align: top; padding: 10px;">
-                                    <p><strong style="color: #333;">Hotel ID:</strong> ${Hotel_Id}</p>
-                                    <p><strong style="color: #333;">Hotel Name:</strong> ${Hotel_name}</p>
-                                    <p><strong style="color: #333;">Room Number:</strong> ${roomNumber}</p>
-                                    <p><strong style="color: #333;">Room Type:</strong> ${roomType}</p>
-                                </td>
-                                <td style="vertical-align: top; padding: 10px;">
-                                    <p><strong style="color: #333;">Booking ID:</strong> ${booking_Id}</p> 
-                                    <p><strong style="color: #333;">Customer ID:</strong> ${customerId}</p>
-                                    <p><strong style="color: #333;">Status:</strong> Confirmed</p>
-                                    <p><strong style="color: #333;">Check-In Date:</strong> ${checkInDate}</p>
-                                    <p><strong style="color: #333;">Check-Out Date:</strong> ${checkOutDate}</p>
-                                </td>
-                            </tr>
-                        </table> 
-                       
-                            <tr>
-                                <td colspan="4" style="padding: 10px;"><strong>Customer Email:</strong> ${customer_email}</td>
-                            </tr>
-                             <p> <h3> Thank you for using our services .....! </h3>
-                        </table>
-                    </div>
-    
-                </body>
-                </html>
-            `;
+<html lang="en">
 
-            sendBookingEmail(customer_email, `Hotel Booking ..!`, bookingContent);
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hotel Booking Receipt and Invoice</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: fff;
+        }
+
+        .container {
+            width: 80%;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: rgba(250, 235, 215, 0.268);
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            text-align: center;
+            padding: 3px 0;
+        }
+
+        .header img {
+            max-width: 100px;
+        }
+
+        .header h3 {
+            margin: 5px 0;
+            font-size: 24px;
+        }
+
+        .invoice-info,
+        .guest-info,
+        .booking-info,
+        .payment-info {
+            margin-bottom: 0px;
+        }
+
+        .invoice-info h3,
+        .guest-info h3,
+        .booking-info h3,
+        .payment-info h3 {
+            margin-bottom: 4px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 0px;
+        }
+
+        .invoice-info p,
+        .guest-info p,
+        .booking-info p,
+        .payment-info p {
+            margin: 5px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        table,
+        th,
+        td {
+            border: 1px solid #ddd;
+        }
+
+        th,
+        td {
+            padding: 10px;
+            text-align: left;
+        }
+
+        thead tr:first-child th {
+            background: #a8a6a6;
+        }
+
+        .footer p {
+            margin: 10px 0;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .logo {
+            width: 50px;
+            height: 50px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+           
+            <h3>Hotel Booking Reciept</h3>
+            <p> ${booking.Hotel_name}</p>
+            <p>Hotel Address : ${Hotel.address} </p>
+            <p>Phone: ${hotel_manager.contact_no} | Email: ${hotel_manager.email}</p>
+        </div>
+
+        <div class="invoice-info">
+            <h3>Booking</h3>
+            <p>Booking Id : ${booking_Id}</p>
+            <p>Booking Date: ${booking.createdAt}</p>
+        </div>
+        
+       
+            <div class="booking-info">
+                <h3>Booking Information</h3>
+                <p>Check-in Date: ${booking.checkIn}</p>
+                <p>Check-out Date: ${booking.checkOut}</p>
+                <p>Room Type: ${booking.roomType}</p>               
+                <p>Number of Guests: ${Number_of_guests}</p>
+            </div>
+      
+        <div class="payment-info">
+           
+                    <h3>Payment Information</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Description</th>
+                                <th>Number of Guests</th> 
+                                <th>Total Discount</th>
+                                <th>Total Amount paid</th>
+                                 
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Ticket Details </td>
+                                <td>${Number_of_guests}</td>
+                                <td>${discount_price}</td>
+                                <td>${paid_amount}</td>
+                            </tr>
+                            <tr>
+                                <td>Service Charges</td>
+                                <td>-</td>
+                                <td>-</td>
+                                <td>-</td>
+                            </tr>
+                            <tr>
+                                <td>Taxes</td>
+                                <td>-</td>
+                                <td>-</td>
+                                <td>-</td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th colspan="3">Total Amount</th>
+                                <th>${paid_amount}</th>
+                            </tr>
+                        </tfoot>
+                    </table>                  
+                <div class="booking-info">
+                <h3>Transaction Information</h3>
+                <p>Payment Method : ${payment_method}</p>
+                <p> payment Status : ${transaction.payment_status}</p>
+                <p>Transaction Id : ${transaction.transaction_Id}</p>               
+               
+            </div>
+                
+           
+        </div>
+        <div class="footer">
+            <p>Thank you for choosing our service <strong> Aylan.com </strong>  We look forward to serving you again!</p>
+        </div>
+    </div>
+</body>
+
+</html>        `;
+
+
+             
+
+            sendBookingEmail(booking.customer_email, `Hotel Booking ..!`, bookingContent);
                   // Save a single record in UsersNotificationModel
                   const savedNotification = await customer_NotificationModel.create({
                     customerId: booking.customerId,
                     title : "Booking Confirmation",
-                    message : `Congratulations your Booking has been confirmed for the hotel : ${Hotel_name}`,        
+                    message : `Congratulations your Booking has been confirmed for the hotel : ${booking.Hotel_name}`,        
                     customerEmail: booking.customer_email,
                     status : 1            
                 });
@@ -1368,6 +1526,77 @@ const updateRoom = async (req, res) => {
           
             
     
+                                                        /* contact us details */
+        // Api for get all contact us details
+        const getContact_Details = async ( req , res )=> {
+            try {
+                  // check dor all details
+                  const all_details = await contact_usModel.find()
+                  if(!all_details)
+                  {
+                     return res.status(400).json({
+                          success : false,
+                          message : 'No details found'
+                     })
+                  }
+
+                     // sort the contact detail
+                     const sorted_data = await all_details.sort(( a , b ) => {  b.createdAt - a.createdAt })
+
+                     return res.status(200).json({
+                          success : true ,
+                          message : 'All Details',
+                          Details : all_details
+                     })
+            } catch (error) {
+               return res.status(500).json({
+                  success : false ,
+                  message : "server error",
+                  error_message : error.message
+               })
+            }
+       }
+
+// Api for particular contact details
+    const delete_contact_detail = async ( req , res )=> {
+        try {
+                 const contact_id = req.params.contact_id
+             // check for contact id
+
+             if(!contact_id)
+             {
+                   return res.status(400).json({
+                       success : false ,
+                       message : 'contact Id required'
+                   })
+             }
+
+             // check for contact details
+                const contact = await contact_usModel.findOne({ _id : contact_id })
+
+                if(!contact)
+                {
+                   return res.status(400).json({
+                         success : false ,
+                         message : 'no Details found'
+                   })
+                }
+
+                await contact.deleteOne()
+
+                return res.status(200).json({
+                     success : true ,
+                     message : 'Details Deleted successfully'
+                })
+        } catch (error) {
+            return res.status(500).json({
+                success : false ,
+                message : 'server error',
+                error_message : error.message
+            })
+        }
+    }
+                
 
 
 module.exports = {
@@ -1376,5 +1605,5 @@ module.exports = {
       updateRoom , searchBooking , privacyAndPolicy , getPrivacy_policy , term_condition,
       getHotel_term_condition , getAllComplains , getRating_Reviews , getHotel_notificaition,
       seen_Hotel_notification , sendNotification_to_allCustomer , export_all_bookings_of_hotel,
-      get_all_transaction_of_hotel
+      get_all_transaction_of_hotel , getContact_Details , delete_contact_detail
 }

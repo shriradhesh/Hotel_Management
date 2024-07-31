@@ -7,10 +7,11 @@
    const userModel = require('../models/userModel')
    const complainModel = require('../models/complainModel')
    const rating_review_Model = require('../models/rating_review_model')
-const customer_NotificationModel = require('../models/customerNotification')
-const promo_Coupon_Model = require('../models/promo_coupon')
-const TransactionModel = require('../models/transactionModel')
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+    const customer_NotificationModel = require('../models/customerNotification')
+    const promo_Coupon_Model = require('../models/promo_coupon')
+    const TransactionModel = require('../models/transactionModel')
+    const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+    const contact_usModel = require('../models/contact_us')
 
                                       /* customer Section */
       // Api for customer Register
@@ -1009,202 +1010,58 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
                                 message: `Guests limit exceeded. Maximum allowed guests for ${number_of_Rooms} ${roomType} room(s) is ${roomCapacity * number_of_Rooms}.`
                             });
                         }
-                            // set the commision
-                                       
-                            var commision_price = (room_fare * (commision_rate / 100)) 
-                                       
-                        // check the promocode is valid or not
-                        if (promoCode) {
-                            const check_promo_code = await promo_Coupon_Model.findOne({
-                                promo_code: promoCode
-                            });
-
-                            if (!check_promo_code || new Date() > check_promo_code.end_Date) {
-                                return res.status(400).json({
-                                    success: false,
-                                    message: `Applied promo code is  not valid`
-                                });
-                            }
-                
-                               // check if the promo  code usage has exceeded its limit
-                               const promo_codeUsageCount = await bookedRoomModel.countDocuments({ promoCode })
-                               if(promo_codeUsageCount > check_promo_code.limit)
-                                {
-                                  return res.status(400).json({
-                                    success: false,
-                                    message: `Promo code usage limit has been exceeded`
-                                });
-                                }
-
-
-                    if (checkInDate < check_promo_code.start_Date || checkInDate > check_promo_code.end_Date) {
-                        return res.status(400).json({
-                            success: false,
-                            message: `Applied promo code is not valid for the selected check-in date`
-                        });
-                    }                                     
-
-                    const discount = check_promo_code.discount / 100;
-                    const discount_price = room_fare * discount;
-                    room_fare = room_fare - discount_price;
-                    
-            }
-
 
                           // check for payment_key 
                           // 1 for stripe 
                           // 2 for pay pal
-                          if (payment_key === 1) {
-                            try {
-                                // Convert room fare into cents
-                                const room_fare_in_Cents = room_fare * 100;
-                        
-                                // Create charge with Stripe
-                                const charge = await stripe.charges.create({
-                                    amount: room_fare_in_Cents,
-                                    currency: "usd",
-                                    description: "Hotel Room Booking",
-                                    source: payment, // Token Id
-                                    receipt_email: email,
-                                });
-                        
-                                const charge_status = charge.status;
-                        
-                                // Check if the charge was successful
-                                if (charge_status === 'succeeded') {
-                                    const bookingIds = [];
-                                    for (let i = 0; i < number_of_Rooms; i++) {
-                                        const randomNumber = generateRandomNumber(6);
-                                        const booking_Id = `BKID${randomNumber}`;
-                                        bookingIds.push(booking_Id);
-                        
-                                        const existingTransaction = await TransactionModel.findOne({ booking_Id });
-                        
-                                        if (existingTransaction) {
-                                            return res.status(400).json({
-                                                success: false,
-                                                message: "Booking has already been paid",
-                                            });
-                                        }
-                        
-                                        // Store the payment transaction
-                                        const transaction = new TransactionModel({
-                                            booking_Id,
-                                            chargeId: charge.id,
-                                            Hotel_Id  : hotelId,
-                                            amount: room_fare,
-                                            currency: "usd",
-                                            payment_status: charge_status,
-                                            payment_key,
-                                            promoCode: promoCode || null,
-                                            discount_price: discount_price || 0,
-                                        });
-                        
-                                        await transaction.save();
-                        
-                                        // Create booking object for each room
-                                        const booking = {
-                                            Hotel_Id: hotelId,
-                                            Hotel_name: hotel.Hotel_name,
-                                            customer_email: customer_email,
-                                            Booking_Id: booking_Id,
-                                            roomType: roomType,
-                                            customerId: customerId,
-                                            status: "pending",
-                                            checkIn: checkInDate,
-                                            checkOut: checkOutDate,
-                                            room_fare: room_fare,
-                                            bookedRoom: [],
-                                            promoCode: promoCode || null,
-                                            commision_price: commision_price,
-                                            guests: guests.slice(i * roomCapacity, (i + 1) * roomCapacity) // Slice guests for each room
-                                        };
-                        
-                                        // Save booking details in bookedRoomModel
-                                        await bookedRoomModel.create(booking);
-                                    }
-                        
-                                    return res.status(200).json({
-                                        success: true,
-                                        message: 'Booking successful',
-                                        bookingIds: bookingIds
-                                    });
-                                } else {
-                                    const bookingIds = [];
-                                    for (let i = 0; i < number_of_Rooms; i++) {
-                                        const randomNumber = generateRandomNumber(6);
-                                        const booking_Id = `BKID${randomNumber}`;
-                                        bookingIds.push(booking_Id);
-                        
-                                        // Store the payment transaction with failed status
-                                        const transaction = new TransactionModel({
-                                            booking_Id,
-                                            chargeId: charge.id,
-                                            Hotel_Id  : hotelId,
-                                            amount: room_fare,
-                                            currency: "usd",
-                                            payment_status: charge_status,
-                                            payment_key,
-                                            promoCode: promoCode || null,
-                                            discount_price: discount_price || 0,
-                                        });
-                        
-                                        await transaction.save();
-                                    }
-                        
-                                    return res.status(400).json({
-                                        success: false,
-                                        message: 'Payment failed',
-                                        bookingIds: bookingIds
-                                    });
-                                }
-                            } catch (error) {
-                                return res.status(400).json({
-                                    success: false,
-                                    message: 'Error while making stripe payment',
-                                    error_message: error.message
-                                });
-                            }
-                        }
-                        
-                        
-              // check for paypal
+                       // Function to generate a random number
+function generateRandomNumber(length) {
+    var result = '';
+    const characters = '0123456789';
+    const charactersLength = characters.length;
 
-              if( payment_key === 2)
-                {
-                    try {
-                        
-                    } catch (error) {
-                        return res.status(400).json({
-                             success : false ,
-                             message : ' Error while making payment using paypal ',
-                             error_message : error.message
-                        })
-                    }
-                }
+    for (let i = 0; i < length; i++) {
+        result += characters.charAt(Math.floor(Math.random() * charactersLength));
+    }
 
-                const generateAndSendEmail = async (payment_key) => {
-                    
-                            // Send email to the hotel manager for each room
-                            const emailContent = ` <!DOCTYPE html>
-                            <html lang="en">
-                            <head>
-                                <meta charset="UTF-8">
-                                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                                <title>Booking Confirmation</title>
-                            </head>
-                            <body style="font-family: Arial, sans-serif; background-color: #f2f2f2; padding: 20px;">
-            
-                                <div style="background-color: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);">
-                                    <h2 style="color: #333; text-align: center; margin-bottom: 20px;">Booking Confirmation</h2>
-                                    <p>A new booking request has arisen from<strong> ${customerName}  </strong> for <strong> ${hotel.Hotel_name}</strong> , <strong> ${i+1}</strong> Room</p>
-                                </div>
-            
-                            </body>
-                            </html>`;
-            
-                            sendBookingEmail(hotelManager_Email, `Hotel Booking ..!`, emailContent);
-            
+    return result;
+}
+
+   
+
+// Function to generate a unique booking ID
+const generateUniqueBookingId = async () => {
+    let booking_Id;
+    let existingTransaction;
+
+    do {
+        booking_Id = `BKID${generateRandomNumber(6)}`; // Generate a random ID
+     
+        existingTransaction = await TransactionModel.findOne({ bookingId: booking_Id });
+    } while (existingTransaction); // Continue until a unique ID is found
+
+    return booking_Id;
+};
+
+    // Send email to the hotel manager for each room
+    const emailContent = ` <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Booking Confirmation</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; background-color: #f2f2f2; padding: 20px;">
+
+        <div style="background-color: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);">
+            <h2 style="color: #333; text-align: center; margin-bottom: 20px;">Booking Confirmation</h2>
+            <p>A new booking request has arisen from<strong> ${customerName}  </strong> for <strong> ${hotel.Hotel_name}</strong> , <strong> ${number_of_Rooms}</strong> Room</p>
+        </div>
+
+    </body>
+    </html>`;
+
+    
                             // Send E-mail to customer regarding Booking
                             const emailContent1 = `<!DOCTYPE html>
                             <html lang="en">
@@ -1223,26 +1080,242 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
             
                             </body>
                             </html>`;
-            
-                            sendBookingEmail(customer_email, `Hotel Booking ..!`, emailContent1);
-                                    
-                                        }
 
-                                        switch (payment_key) {
-                                            case 1: // Stripe
-                                            await generateAndSendEmail(1);
-                                            break;
-                                            case 2: // paypal
-                                            await generateAndSendEmail(2);
-                                            break;                    
-                                            default:
-                                            // Handle unsupported payment method
-                                            return res.status(400).json({
-                                                success: false,
-                                                message: 'Unsupported payment method',
-                                            });
-                                        }
-                 
+
+if (payment_key === 1) {
+    try {
+        // Set the commission
+        const commision_price = (room_fare * (commision_rate / 100));
+
+        // Check if promo code is valid
+        if (promoCode) {
+            const check_promo_code = await promo_Coupon_Model.findOne({ promo_code: promoCode });
+
+            if (!check_promo_code || new Date() > check_promo_code.end_Date) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Applied promo code is not valid'
+                });
+            }
+
+            // Check if promo code usage has exceeded its limit
+            const promo_codeUsageCount = await bookedRoomModel.countDocuments({ promoCode });
+            if (promo_codeUsageCount > check_promo_code.limit) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Promo code usage limit has been exceeded'
+                });
+            }
+
+            if (checkInDate < check_promo_code.start_Date || checkInDate > check_promo_code.end_Date) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Applied promo code is not valid for the selected check-in date'
+                });
+            }
+
+            const discount = check_promo_code.discount / 100;
+            const discount_price = room_fare * discount;
+            room_fare -= discount_price;
+        }
+
+        // Convert room fare into cents
+        const room_fare_in_Cents = room_fare * 100;
+
+        // Create charge with Stripe
+        const charge = await stripe.charges.create({
+            amount: room_fare_in_Cents,
+            currency: 'usd',
+            description: 'Hotel Room Booking',
+            source: payment, // Token Id
+            receipt_email: customer_email,
+        });
+
+        const charge_status = charge.status;
+
+        // Check if the charge was successful
+        if (charge_status === 'succeeded') {
+            const bookingIds = [];
+            for ( var i = 0; i < number_of_Rooms; i++) {
+                const booking_Id = await generateUniqueBookingId(); // Ensure unique booking ID
+                bookingIds.push(booking_Id);
+
+                // Store the payment transaction
+                const transaction = new TransactionModel({
+                    bookingId : booking_Id,
+                    transaction_Id: charge.id,
+                    Hotel_Id: hotelId,
+                    amount: room_fare,
+                    currency: 'usd',
+                    payment_status: charge_status,
+                    payment_key,
+                    promoCode: promoCode || null,
+                    discount_price: discount_price || 0,
+                });
+
+                await transaction.save();
+
+                // Create booking object for each room
+                const booking = {
+                    Hotel_Id: hotelId,
+                    Hotel_name: hotel.Hotel_name,
+                    customer_email: customer_email,
+                    Booking_Id: booking_Id,
+                    roomType: roomType,
+                    customerId: customerId,                   
+                    checkIn: checkInDate,
+                    checkOut: checkOutDate,
+                    room_fare: room_fare,
+                    bookedRoom: [],
+                    promoCode: promoCode || null,
+                    commision_price: commision_price,
+                    guests: guests.slice( i * roomCapacity, (i + 1) * roomCapacity) // Slice guests for each room
+                };
+
+                await bookedRoomModel.create(booking);
+            }
+
+            return res.status(200).json({
+                success: true,
+                message: 'Booking successful',
+                bookingIds: bookingIds
+            });
+        } else {
+            const bookingIds = [];
+            for (var i = 0; i < number_of_Rooms; i++) {
+                const booking_Id = await generateUniqueBookingId(); // Ensure unique booking ID
+                bookingIds.push(booking_Id);
+
+                // Store the payment transaction with failed status
+                const transaction = new TransactionModel({
+                    bookingId : booking_Id,
+                    transaction_Id: charge.id,
+                    Hotel_Id: hotelId,
+                    amount: room_fare,
+                    currency: 'usd',
+                    payment_status: charge_status,
+                    payment_key,
+                    promoCode: promoCode || null,
+                    discount_price: discount_price || 0,
+                });
+
+                await transaction.save();
+            }
+                // email to hotel manager
+            sendBookingEmail(hotelManager_Email, `Hotel Booking ..!`, emailContent);
+                // email to customer
+            sendBookingEmail(customer_email, `Hotel Booking ..!`, emailContent1);
+
+            return res.status(400).json({
+                success: false,
+                message: 'Payment failed',
+                bookingIds: bookingIds
+            });
+        }
+    } catch (error) {
+        return res.status(400).json({
+            success: false,
+            message: 'Error while making stripe payment',
+            error_message: error.message
+        });
+    }
+}
+
+if (payment_key === 2) {
+    try {
+        // Set the commission
+        const commision_price = (room_fare * (commision_rate / 100));
+
+        // Check if promo code is valid
+        if (promoCode) {
+            const check_promo_code = await promo_Coupon_Model.findOne({ promo_code: promoCode });
+
+            if (!check_promo_code || new Date() > check_promo_code.end_Date) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Applied promo code is not valid'
+                });
+            }
+
+            // Check if promo code usage has exceeded its limit
+            const promo_codeUsageCount = await bookedRoomModel.countDocuments({ promoCode });
+            if (promo_codeUsageCount > check_promo_code.limit) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Promo code usage limit has been exceeded'
+                });
+            }
+
+            if (checkInDate < check_promo_code.start_Date || checkInDate > check_promo_code.end_Date) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Applied promo code is not valid for the selected check-in date'
+                });
+            }
+
+            const discount = check_promo_code.discount / 100;
+            var discount_price = room_fare * discount;
+            room_fare -= discount_price;
+        }
+
+        const bookingIds = [];
+        for ( var i = 0; i < number_of_Rooms; i++) {
+            const booking_Id = await generateUniqueBookingId(); // Ensure unique booking ID
+            bookingIds.push(booking_Id);
+
+            // Store the payment transaction
+            const transaction = new TransactionModel({
+                bookingId : booking_Id,
+                transaction_Id: 'xyz', 
+                Hotel_Id: hotelId,
+                amount: room_fare,
+                currency: 'usd',
+                payment_status: 'charge_status', 
+                payment_key,
+                promoCode: promoCode || null,
+                discount_price: discount_price || 0,
+            });
+
+            await transaction.save();
+
+            // Create booking object for each room
+            const booking = {
+                Hotel_Id: hotelId,
+                Hotel_name: hotel.Hotel_name,
+                customer_email: customer_email,
+                Booking_Id: booking_Id,
+                roomType: roomType,
+                customerId: customerId,               
+                checkIn: checkInDate,
+                checkOut: checkOutDate,
+                room_fare: room_fare,
+                bookedRoom: [],
+                promoCode: promoCode || null,
+                commision_price: commision_price,
+                guests: guests.slice(i * roomCapacity, (i + 1) * roomCapacity) // Slice guests for each room
+            };
+
+            await bookedRoomModel.create(booking);
+        }
+             // email to hotel manager
+             sendBookingEmail(hotelManager_Email, `Hotel Booking ..!`, emailContent);
+             // email to customer
+            sendBookingEmail(customer_email, `Hotel Booking ..!`, emailContent1);
+                
+        return res.status(200).json({
+            success: true,
+            message: 'Booking successful',
+            bookingIds: bookingIds
+        });
+    } catch (error) {
+        return res.status(400).json({
+            success: false,
+            message: 'Error while making payment using PayPal',
+            error_message: error.message
+        });
+    }
+}
+
 
                             // Return success response with all booking IDs
                             return res.status(200).json({
@@ -1259,18 +1332,7 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
         }
     };
       
-    // Function to generate a random number
-    function generateRandomNumber(length) {
-        let result = '';
-        const characters = '0123456789';
-        const charactersLength = characters.length;
-    
-        for (let i = 0; i < length; i++) {
-            result += characters.charAt(Math.floor(Math.random() * charactersLength));
-        }
-    
-        return result;
-    }
+   
 
  
 
@@ -1718,11 +1780,52 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
    
         
         
+                                                        /* Contact us Section */
+            
+                // Api for contact us
+                const contact_us = async ( req , res )=> {
+                      try {
+                            const { Name , email , message } = req.body
                         
+                        // check for required fields
+                        const requiredFields = ['Name' , 'email' , 'message' ]
+                        for( let field of requiredFields)
+                        {
+                              if(!req.body[field])
+                              {
+                                   return res.status(400).json({
+                                      success : false ,
+                                      message : `Missing ${field.replace('_'),(' ')}`
+                                   })
+                              }
+                        }
+
+                            // add new data
+                               const newData = new contact_usModel({
+                                  Name  ,
+                                  email,
+                                  message
+                               })
+
+                               await newData.save()
+
+                               return res.status(200).json({
+                                 success : true ,
+                                 message : ' New Data Saved successfully'
+                               })
+                      } catch (error) {
+                          return res.status(500).json({
+                             success : false ,
+                             message : 'server error',
+                             error_message : error.message
+                          })
+                      }
+                }
             
         
    module.exports = {
       register_customer , logincustomer , updatecustomer , getcustomer_Details , getAllcustomer , customer_change_pass , 
       deleteCustomer , active_inactive_customer , search_Hotel , bookHotel , getUpcomingBookings , getRecent_Bookings ,
-      createComplain , cancelBooking , createRatingReview , customer_Notification , seen_customer_notification , filter_Hotel 
+      createComplain , cancelBooking , createRatingReview , customer_Notification , seen_customer_notification , filter_Hotel ,
+      contact_us
    } 

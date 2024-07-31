@@ -104,7 +104,6 @@ const superAdminController = require('../controller/superAdminController')
                                      /* Tranasaction Sections */
 // Api for get all_transaction
                         router.get('/all_transaction', superAdminController.all_transaction)
-
  
 
 module.exports = router

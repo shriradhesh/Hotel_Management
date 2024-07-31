@@ -55,6 +55,11 @@ const upload = require('../upload')
 // APi for seen_customer_notification
        router.get('/seen_customer_notification/:notification_id', customerController.seen_customer_notification)
 
+                                          /* Contact us section */
+
+// Api for contact_us
+       router.post('/contact_us', customerController.contact_us)
+
 
 
           

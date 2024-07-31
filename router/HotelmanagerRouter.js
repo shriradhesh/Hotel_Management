@@ -70,6 +70,14 @@ const HotelManagerController = require('../controller/HotelmanagerController')
                                   /*   Transaction section */
     // Api for get_all_transaction_of_hotel
                 router.get('/get_all_transaction_of_hotel/:Hotel_Id', HotelManagerController.get_all_transaction_of_hotel)
+
+                                                   /* contact us section */
+        // Api for getContact_Details
+                router.get('/getContact_Details', HotelManagerController.getContact_Details)
+        // Api for delete_contact_detail
+                 router.delete('/delete_contact_detail/:contact_id', HotelManagerController.delete_contact_detail)
+
+ 
                                
 
 

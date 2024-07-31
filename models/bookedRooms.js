@@ -28,6 +28,7 @@ const bookedRoomSchema = new mongoose.Schema({
     status : {
         type : String,
             enum :['confirmed' , 'pending', 'cancelled'],
+            default : 'pending'
           
     },
     roomType : {
@@ -78,11 +79,11 @@ const bookedRoomSchema = new mongoose.Schema({
         age: {
             type: Number,
             required: true
-        },
-        phoneNumber: {
-            type: Number,
-            required: true
         }
+        // phoneNumber: {
+        //     type: Number,
+        //     required: true
+        // }
     }],
     totalguests : {
         type: Number
