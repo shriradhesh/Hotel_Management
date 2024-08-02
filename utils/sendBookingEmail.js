@@ -1,32 +1,69 @@
 const nodemailer = require('nodemailer');
-const { createTransport } = require('nodemailer');
+const puppeteer = require('puppeteer');
 
-const sendBookingEmail = async (recipientEmail, subject, text) => {
+const sendBookingEmail = async (recipientEmail, subject, emailContent , htmlContent) => {
     try {
-        const transporter = createTransport({
+        // Generate PDF from HTML content using Puppeteer
+        const pdfBuffer = await createPDF(htmlContent);
+
+        // Create a Nodemailer transporter using Gmail SMTP
+        const transporter = nodemailer.createTransport({
             host: 'smtp.gmail.com',
             port: 587,
-            secure: false, // Set this to true if you're using a secure connection
+            secure: false,
             requireTLS: true,
             auth: {
                 user: process.env.SMTP_MAIL,
-                pass: process.env.SMTP_PASSWORD,
-            },
-            tls: {
-                rejectUnauthorized: false // Add this line to ignore certificate validation
+                pass: process.env.SMTP_PASSWORD
             }
         });
 
+        // Send email with attachment
         await transporter.sendMail({
             from: process.env.SMTP_MAIL,
             to: recipientEmail,
             subject: subject,
-            html: text,
+            html : emailContent ,
+            attachments: [
+                {
+                    filename: 'certificate.pdf',
+                    content: pdfBuffer,
+                    encoding: 'base64',
+                    contentType: 'application/pdf'
+                }
+            ]
         });
-        console.log('Email sent successfully');
+
+        console.log("Email sent successfully");
     } catch (error) {
-        console.log(error, 'Email not sent');
+        console.error("Error sending email:", error);
+        throw new Error("Email sending failed");
     }
 };
+
+const createPDF = async (htmlContent) => {
+    try {
+        const browser = await puppeteer.launch({
+            // Adjust these options as needed
+            headless: true, // or false to see Chromium in action
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        });
+        const page = await browser.newPage();
+
+        // Adjust viewport and wait for network idle
+        await page.setViewport({ width: 1000, height: 1100 }); // Adjust viewport size as needed
+        await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+
+        // Generate PDF with a timeout
+        const pdf = await page.pdf({ format: 'A5', landscape : false , timeout: 60000 }); // Adjust timeout as needed
+
+        await browser.close();
+        return pdf;
+    } catch (error) {
+        console.error('Error generating PDF:', error);
+        throw new Error('PDF generation failed: ' + error.message); // Log detailed error message
+    }
+};
+
 
 module.exports = sendBookingEmail;

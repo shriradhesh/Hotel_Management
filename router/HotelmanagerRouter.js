@@ -77,6 +77,10 @@ const HotelManagerController = require('../controller/HotelmanagerController')
         // Api for delete_contact_detail
                  router.delete('/delete_contact_detail/:contact_id', HotelManagerController.delete_contact_detail)
 
+                                                 /* Dahsboard count */
+        // Api for hotel_manager_dashboard_count
+                  router.get('/hotel_manager_dashboard_count/:Hotel_Id', HotelManagerController.hotel_manager_dashboard_count)
+
  
                                
 

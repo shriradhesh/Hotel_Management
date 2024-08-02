@@ -596,10 +596,11 @@
         
                     ratingsAndReviews.forEach(review => {
                         totalRating += review.rating;
+                         
                     });
         
                     hotel.averageRating = totalReviews > 0 ? totalRating / totalReviews : 0;
-        
+                    
         
                     resultHotels.push({
                         _id: hotel._id,
@@ -622,6 +623,7 @@
                         bookedRoomTypeCounts: hotel.bookedRoomTypeCounts,
                         room_price : roomPricesByType, 
                         Rating: hotel.averageRating || 5
+                        
                     
                     });
                 }                    
@@ -1822,6 +1824,8 @@ if (payment_key === 2) {
                       }
                 }
             
+
+                
         
    module.exports = {
       register_customer , logincustomer , updatecustomer , getcustomer_Details , getAllcustomer , customer_change_pass , 

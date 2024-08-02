@@ -399,6 +399,8 @@ const updateRoom = async (req, res) => {
                const hotel_manager = await userModel.findOne({ manager_id : Hotel.manager_id })
                // check for transaction
                 const transaction = await TransactionModel.findOne({ bookingId : booking_Id })
+                // check for customer Details
+                const customer = await customerModel.findOne({ _id : booking.customerId })
                    
                    let payment_method = ''
                      if(transaction.payment_key === 1)
@@ -452,8 +454,41 @@ const updateRoom = async (req, res) => {
             // Update the booking document with the modified floors
             await booking.save();
 
+              const emailContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booking Confirmation</title>
+</head>
+<body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f7f7f7;">
+    <div style="width: 100%; max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 20px; border: 1px solid #dddddd;">
+        <div style="text-align: center; padding: 10px 0;">
+            <h2>Booking Confirmation</h2>
+        </div>
+        <div style="padding: 20px 0;">
+            <p>Dear ${customer.customerName},</p>
+            <p>Your booking at ${booking.Hotel_name} has been successfully confirmed.</p>
+            <p>Booking Details:</p>
+            <ul>
+                <li><strong>Check-in Date:</strong> ${booking.checkIn}</li>
+                <li><strong>Check-out Date:</strong> ${booking.checkOut}</li>
+                <li><strong>Hotel Address:</strong> ${Hotel.address} </li>
+            </ul>
+            <p>Thank you for choosing our service. We look forward to making your stay memorable.
+        
+        <div style="text-align: left; padding: 10px 0;">
+            <p>Best regards,<br>
+           ${hotel_manager.name} <br>
+            ${Hotel.Hotel_name} </p>
+        
+    </div>
+</body>
+</html>
+`
+
             const bookingContent = `
-                <!DOCTYPE html>
+       <!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -465,87 +500,59 @@ const updateRoom = async (req, res) => {
             font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
-            background-color: fff;
+            background-color: #f4f4f9;
         }
-
         .container {
             width: 80%;
             margin: 20px auto;
-            padding: 20px;
-            background-color: rgba(250, 235, 215, 0.268);
+            padding: 15px;
+            background-color: #fff;
             border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
         }
-
         .header {
             text-align: center;
-            padding: 3px 0;
+            padding: 15px 0;
+            background: linear-gradient(90deg, #007bff, #00d4ff);
+            color: #fff;
+            border-radius: 12px 12px 0 0;
         }
-
-        .header img {
-            max-width: 100px;
+        .content {
+            padding: 5px;
+            background-color: #f0f8ff;
+            border-radius: 12px;
+            border: 1px solid #ddd;
         }
-
-        .header h3 {
+        h3 {
+            margin: 8px 0;
+            border-bottom: 2px solid #007bff;
+            color: #007bff;
+            padding-bottom: 5px;
+            font-size: 10px;
+        }
+        p {
             margin: 5px 0;
-            font-size: 24px;
+            font-size: 10px;
         }
-
-        .invoice-info,
-        .guest-info,
-        .booking-info,
-        .payment-info {
-            margin-bottom: 0px;
-        }
-
-        .invoice-info h3,
-        .guest-info h3,
-        .booking-info h3,
-        .payment-info h3 {
-            margin-bottom: 4px;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 0px;
-        }
-
-        .invoice-info p,
-        .guest-info p,
-        .booking-info p,
-        .payment-info p {
-            margin: 5px 0;
-        }
-
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
+            margin-bottom: 12px;
         }
-
-        table,
-        th,
-        td {
-            border: 1px solid #ddd;
+        th, td {
+            border: 2px solid #ddd;
+            padding: 8px;
+            font-size: 10px;
         }
-
-        th,
-        td {
-            padding: 10px;
-            text-align: left;
+        th {
+            background: linear-gradient(90deg, #007bff, #00d4ff);
+            color: #fff;
         }
-
-        thead tr:first-child th {
-            background: #a8a6a6;
-        }
-
-        .footer p {
+        .footer {
             margin: 10px 0;
-            font-size: 12px;
+            font-size: 10px;
             color: #666;
-        }
-
-        .logo {
-            width: 50px;
-            height: 50px;
-            border-radius: 5px;
+            text-align: center;
         }
     </style>
 </head>
@@ -553,90 +560,82 @@ const updateRoom = async (req, res) => {
 <body>
     <div class="container">
         <div class="header">
-           
-            <h3>Hotel Booking Reciept</h3>
-            <p> ${booking.Hotel_name}</p>
-            <p>Hotel Address : ${Hotel.address} </p>
+            <h3>Hotel Booking Receipt</h3>
+            <p>${booking.Hotel_name}</p>
+            <p>Hotel Address: ${Hotel.address}</p>
             <p>Phone: ${hotel_manager.contact_no} | Email: ${hotel_manager.email}</p>
         </div>
 
-        <div class="invoice-info">
+        <div class="content">
             <h3>Booking</h3>
-            <p>Booking Id : ${booking_Id}</p>
+            <p>Booking Id: ${booking_Id}</p>
             <p>Booking Date: ${booking.createdAt}</p>
+
+            <h3>Booking Information</h3>
+            <p>Check-in Date: ${booking.checkIn}</p>
+            <p>Check-out Date: ${booking.checkOut}</p>
+            <p>Room Type: ${booking.roomType}</p>
+            <p>Number of Guests: ${Number_of_guests}</p>
+
+            <h3>Payment Information</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Description</th>
+                        <th>Number of Guests</th>
+                        <th>Total Discount</th>
+                        <th>Total Amount Paid</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Ticket Details</td>
+                        <td>${Number_of_guests}</td>.
+                        
+                        <td>${discount_price}</td>
+                        <td>${paid_amount}</td>
+                    </tr>
+                    <tr>
+                        <td>Service Charges</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                    </tr>
+                    <tr>
+                        <td>Taxes</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="3">Total Amount</th>
+                        <th>${paid_amount}</th>
+                    </tr>
+                </tfoot>
+            </table>
+
+            <h3>Transaction Information</h3>
+            <p>Payment Method: ${payment_method}</p>
+            <p>Payment Status: ${transaction.payment_status}</p>
+            <p>Transaction Id: ${transaction.transaction_Id}</p>
         </div>
-        
-       
-            <div class="booking-info">
-                <h3>Booking Information</h3>
-                <p>Check-in Date: ${booking.checkIn}</p>
-                <p>Check-out Date: ${booking.checkOut}</p>
-                <p>Room Type: ${booking.roomType}</p>               
-                <p>Number of Guests: ${Number_of_guests}</p>
-            </div>
-      
-        <div class="payment-info">
-           
-                    <h3>Payment Information</h3>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Description</th>
-                                <th>Number of Guests</th> 
-                                <th>Total Discount</th>
-                                <th>Total Amount paid</th>
-                                 
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>Ticket Details </td>
-                                <td>${Number_of_guests}</td>
-                                <td>${discount_price}</td>
-                                <td>${paid_amount}</td>
-                            </tr>
-                            <tr>
-                                <td>Service Charges</td>
-                                <td>-</td>
-                                <td>-</td>
-                                <td>-</td>
-                            </tr>
-                            <tr>
-                                <td>Taxes</td>
-                                <td>-</td>
-                                <td>-</td>
-                                <td>-</td>
-                            </tr>
-                        </tbody>
-                        <tfoot>
-                            <tr>
-                                <th colspan="3">Total Amount</th>
-                                <th>${paid_amount}</th>
-                            </tr>
-                        </tfoot>
-                    </table>                  
-                <div class="booking-info">
-                <h3>Transaction Information</h3>
-                <p>Payment Method : ${payment_method}</p>
-                <p> payment Status : ${transaction.payment_status}</p>
-                <p>Transaction Id : ${transaction.transaction_Id}</p>               
-               
-            </div>
-                
-           
-        </div>
+
         <div class="footer">
-            <p>Thank you for choosing our service <strong> Aylan.com </strong>  We look forward to serving you again!</p>
+            <p>Thank you for choosing our service <strong>Aylan.com</strong>. We look forward to serving you again!</p>
         </div>
     </div>
 </body>
 
-</html>        `;
+</html>
 
 
+
+    `;
              
 
-            sendBookingEmail(booking.customer_email, `Hotel Booking ..!`, bookingContent);
+            sendBookingEmail(booking.customer_email, `Hotel Booking ..!`, emailContent , bookingContent);
                   // Save a single record in UsersNotificationModel
                   const savedNotification = await customer_NotificationModel.create({
                     customerId: booking.customerId,
@@ -1546,7 +1545,7 @@ const updateRoom = async (req, res) => {
                      return res.status(200).json({
                           success : true ,
                           message : 'All Details',
-                          Details : all_details
+                          Details : sorted_data
                      })
             } catch (error) {
                return res.status(500).json({
@@ -1596,7 +1595,65 @@ const updateRoom = async (req, res) => {
             })
         }
     }
-                
+            
+    
+
+// Api for dashboard count of Hotel manager
+     const hotel_manager_dashboard_count = async ( req , res )=> {
+           try {
+                   const { Hotel_Id} = req.params
+                   // check for Hotel_Id
+                   if(!Hotel_Id)
+                   {
+                    return res.status(400).json({
+                         success : false ,
+                         message : 'Hotel Id required'
+                    })
+                   }
+
+                     // check for Hotel
+                     const Hotel = await HotelModel.findOne({ Hotel_Id : Hotel_Id })
+                     if(!Hotel)
+                     {
+                          return res.status(400).json({
+                             success : false ,
+                             message : 'Hotel not found'
+                          })
+                     }
+
+                    // check for all customer
+                    const customers = await customerModel.find()
+                    // check for all Bookings of the Hotel
+                    const allBookings_of_hotel = await bookedRoomModel.find({ Hotel_Id : Hotel_Id })
+                    // check for all confirmed booking
+                    const all_confirmed_Bookings_of_hotel = await bookedRoomModel.find({ Hotel_Id : Hotel_Id , status : 'confirmed' })
+                    // check for all canceled booking
+                    const all_cancelled_Bookings_of_hotel = await bookedRoomModel.find({ Hotel_Id : Hotel_Id , status : 'cancelled' })
+                    // check for all pending booking
+                    const all_pending_Bookings_of_hotel = await bookedRoomModel.find({ Hotel_Id : Hotel_Id , status : 'pending' })
+                    // check for all transaction of Hotel
+                    const all_transaction_of_hotel = await TransactionModel.find({ Hotel_Id : Hotel_Id })
+
+                    return res.status(200).json({
+                         success : true ,
+                         message : 'Hotel manager Dashboard',
+                         customers : customers.length,
+                         allBookings_of_hotel : allBookings_of_hotel.length,
+                         all_confirmed_Bookings_of_hotel : all_confirmed_Bookings_of_hotel.length,
+                         all_cancelled_Bookings_of_hotel : all_cancelled_Bookings_of_hotel.length,
+                         all_pending_Bookings_of_hotel : all_pending_Bookings_of_hotel.length,
+                         all_transaction_of_hotel : all_transaction_of_hotel.length
+                    })                   
+
+                    
+           } catch (error) {
+              return res.status(500).json({
+                 success : false ,
+                 message : 'server error',
+                 error_message : error.message
+              })
+           }
+     }
 
 
 module.exports = {
@@ -1605,5 +1662,5 @@ module.exports = {
       updateRoom , searchBooking , privacyAndPolicy , getPrivacy_policy , term_condition,
       getHotel_term_condition , getAllComplains , getRating_Reviews , getHotel_notificaition,
       seen_Hotel_notification , sendNotification_to_allCustomer , export_all_bookings_of_hotel,
-      get_all_transaction_of_hotel , getContact_Details , delete_contact_detail
+      get_all_transaction_of_hotel , getContact_Details , delete_contact_detail , hotel_manager_dashboard_count
 }
